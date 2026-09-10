@@ -1,0 +1,25 @@
+services:
+  # 1. Backend FastAPI Service (Docker)
+  - type: web
+    name: aura-music-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    region: oregon
+    healthCheckPath: /
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: CORS_ORIGINS
+        value: "*"
+
+  # 2. Web Prototype Companion (Static Site)
+  - type: static
+    name: aura-music-prototype
+    staticPublishPath: ./prototype
+    plan: free
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aura Music Platform — Next-Gen AI & Audiophile iOS Experience</title>
+  <meta name="description" content="Next-Generation AI-Driven iOS Music Platform prototype with 0-100% Recommendation Variance Slider, 4-mode shuffle, hybrid library reconciliation, and user-centric royalties.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-background">
+    <div class="glow-orb orb-1"></div>
+    <div class="glow-orb orb-2"></div>
+  </div>
+
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 18V5l12-2v13"></path>
+            <circle cx="6" cy="18" r="3"></circle>
+            <circle cx="18" cy="16" r="3"></circle>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-title">AURA</span>
+          <span class="brand-badge">iOS SRS v1.0</span>
+        </div>
+      </div>
+
+      <nav class="nav-links">
+        <button class="nav-item active" id="tab-for-you" onclick="switchTab('home')">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+          <span>For You</span>
+        </button>
+        <button class="nav-item" id="tab-reconciliation" onclick="switchTab('reconciliation')">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+          <span>Hybrid Library</span>
+        </button>
+        <button class="nav-item" id="tab-royalties" onclick="switchTab('royalties')">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+          <span>User-Centric Royalties</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-honesty-card">
+        <div class="honesty-badge-header">
+          <span class="pulse-dot"></span>
+          <span>AUDIOPHILE HONESTY</span>
+        </div>
+        <p class="honesty-desc">Delivered stream hardware metrics verified via <code>AVAudioSession</code>.</p>
+        <div class="tech-metrics" id="sidebar-metrics">
+          <div><span>Target Format</span><strong>24-bit / 96 kHz</strong></div>
+          <div><span>Active Route</span><strong id="sidebar-route">Direct DAC Output</strong></div>
+          <div><span>Status</span><strong class="text-emerald" id="sidebar-status">Uncompressed</strong></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Top Bar -->
+      <header class="topbar">
+        <div class="search-container">
+          <div class="search-box">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <input type="text" id="search-input" placeholder="Search any song, artist, album, or YouTube track..." oninput="handleSearch(this.value)">
+            <span id="search-spinner" class="search-spinner" style="display: none;"></span>
+          </div>
+          <div class="source-pills">
+            <button class="source-pill active" id="src-all" onclick="setSearchSource('all')">All Sources</button>
+            <button class="source-pill yt-pill" id="src-yt" onclick="setSearchSource('youtube')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+              <span>YouTube Global</span>
+            </button>
+            <button class="source-pill" id="src-lossless" onclick="setSearchSource('lossless')">Lossless Masters</button>
+          </div>
+        </div>
+        <div class="user-pill">
+          <span class="avatar">DY</span>
+          <span class="username">Dev Kumar</span>
+          <span class="user-tier-badge">AUDIOPHILE TIER</span>
+        </div>
+      </header>
+
+      <!-- View: Home / For You -->
+      <section id="view-home" class="view-panel active">
+        <!-- Hero: Recommendation Variance Controller (SRS FR-005, FR-006, FR-007) -->
+        <div class="variance-hero-card">
+          <div class="variance-header">
+            <div class="variance-title-group">
+              <span class="section-tag">ALGORITHMIC AGENCY & TRANSPARENCY</span>
+              <h1>Discovery Variance Control</h1>
+              <p>Tune recommendation behavior in real-time from trusted favorites to unreached catalog long-tail.</p>
+            </div>
+            <div class="variance-pill-display" id="variance-tier-badge">
+              <span id="tier-name">Balanced Mode</span>
+              <span class="tier-percent" id="tier-val">50%</span>
+            </div>
+          </div>
+
+          <div class="variance-slider-wrapper">
+            <div class="slider-track-container">
+              <input type="range" id="variance-slider" min="0" max="100" value="50" oninput="updateVariance(this.value)" aria-label="Recommendation Discovery Variance">
+              <div class="slider-stops">
+                <span class="stop-label" style="left: 0%;">0% Familiar</span>
+                <span class="stop-label" style="left: 35%;">35% Balanced</span>
+                <span class="stop-label" style="left: 65%;">65% Exploratory</span>
+                <span class="stop-label" style="left: 100%;">100% Discovery</span>
+              </div>
+            </div>
+          </div>
+
+          <p class="tier-description" id="tier-description">
+            A curated equilibrium between trusted favorites and smoothly connected songs.
+          </p>
+        </div>
+
+        <!-- 4-Mode Shuffle Selector (SRS FR-008) -->
+        <div class="shuffle-section">
+          <div class="section-header-inline">
+            <h3>4-Mode Shuffle System</h3>
+            <span class="section-caption">SRS FR-008 Compliant</span>
+          </div>
+          <div class="shuffle-modes-grid">
+            <button class="shuffle-card active" id="shuffle-standard" onclick="selectShuffleMode('standard')">
+              <div class="shuffle-top">
+                <span class="mode-tag">Standard</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 3 21 3 21 8"></polyline><line x1="4" y1="20" x2="21" y2="3"></line><polyline points="21 16 21 21 16 21"></polyline><line x1="15" y1="15" x2="21" y2="21"></line><line x1="4" y1="4" x2="9" y2="9"></line></svg>
+              </div>
+              <p>Randomized with lookahead artist repeat avoidance window.</p>
+            </button>
+            <button class="shuffle-card" id="shuffle-true" onclick="selectShuffleMode('true')">
+              <div class="shuffle-top">
+                <span class="mode-tag">True Shuffle</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+              </div>
+              <p>Statistically uniform randomized sequence with zero consecutive repeats.</p>
+            </button>
+            <button class="shuffle-card" id="shuffle-smart" onclick="selectShuffleMode('smart')">
+              <div class="shuffle-top">
+                <span class="mode-tag">Smart Harmonic</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+              </div>
+              <p>Acoustic mixing: matches adjacent BPM and harmonic key compatibility.</p>
+            </button>
+            <button class="shuffle-card" id="shuffle-discovery" onclick="selectShuffleMode('discovery')">
+              <div class="shuffle-top">
+                <span class="mode-tag">Discovery</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
+              </div>
+              <p>Interleaves 2 unfamiliar catalog tracks with 1 familiar favorite.</p>
+            </button>
+          </div>
+        </div>
+
+        <!-- Personalized Feed & Track List -->
+        <div class="tracks-section">
+          <div class="section-header-inline">
+            <div>
+              <h2>Personalized Queue & Recommendations</h2>
+              <span class="section-caption" id="feed-caption">Showing 8 tracks scored for 50% variance</span>
+            </div>
+            <button class="refresh-feed-btn" onclick="fetchLiveRecommendations()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+              <span>Re-rank Stream</span>
+            </button>
+          </div>
+
+          <div class="track-list" id="track-list-container">
+            <!-- Track cards injected dynamically via JavaScript -->
+          </div>
+        </div>
+      </section>
+
+      <!-- View: Hybrid Library Reconciliation (SRS FR-013, FR-014) -->
+      <section id="view-reconciliation" class="view-panel">
+        <div class="feature-hero">
+          <span class="section-tag">HYBRID METADATA ENGINE</span>
+          <h1>Local Audio Import & Hybrid Reconciliation</h1>
+          <p>Import local audio files (FLAC, WAV, ALAC, MP3) and reconcile them with the streaming catalog using ISRC codes, acoustic fingerprints, and SHA-256 validation.</p>
+        </div>
+
+        <div class="import-card">
+          <div class="drop-zone" onclick="triggerSimulatedImport()">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            <h3>Click to Simulate Local File Import</h3>
+            <p>Simulates iOS <code>UIDocumentPickerViewController</code> import with candidate test files.</p>
+          </div>
+        </div>
+
+        <div class="reconciliation-results">
+          <h3>Reconciliation Log & Results</h3>
+          <div class="table-container">
+            <table class="reconcile-table">
+              <thead>
+                <tr>
+                  <th>Imported File</th>
+                  <th>Format</th>
+                  <th>Target ISRC</th>
+                  <th>Resolution Status</th>
+                  <th>Matched Streaming Track</th>
+                  <th>Preserved Metadata</th>
+                </tr>
+              </thead>
+              <tbody id="reconcile-table-body">
+                <!-- Injected via JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Offline Downloads Cache (SRS FR-011, FR-012) -->
+        <div class="downloads-cache-section">
+          <div class="section-header-inline">
+            <div>
+              <h3>Smart Offline Downloads Cache</h3>
+              <span class="section-caption">High-fidelity downloaded audio playable offline with no network connection</span>
+            </div>
+            <span class="storage-pill" id="storage-usage-pill">Local Storage: 14.8 MB</span>
+          </div>
+          <div class="table-container">
+            <table class="reconcile-table">
+              <thead>
+                <tr>
+                  <th>Track & Artist</th>
+                  <th>Format & Quality</th>
+                  <th>File Size</th>
+                  <th>Storage Location</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="downloads-table-body">
+                <!-- Injected via JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- View: User-Centric Royalties (SRS FR-020) -->
+      <section id="view-royalties" class="view-panel">
+        <div class="feature-hero">
+          <span class="section-tag">ARTIST SUSTAINABILITY</span>
+          <h1>User-Centric Revenue Allocation</h1>
+          <p>Unlike traditional pro-rata streaming that channels indie money to mega-popstars, the User-Centric model distributes your exact subscription fee solely to the artists you actually played.</p>
+        </div>
+
+        <div class="royalty-summary-grid">
+          <div class="stat-card">
+            <span class="stat-label">Monthly Subscription</span>
+            <span class="stat-value" id="royalty-sub-amount">$16.99</span>
+            <span class="stat-sub">Audiophile Tier</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Net Artist Pool (70%)</span>
+            <span class="stat-value text-purple" id="royalty-pool-amount">$11.89</span>
+            <span class="stat-sub">30% platform infrastructure fee</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Total Completed Plays</span>
+            <span class="stat-value" id="royalty-streams-count">40 Plays</span>
+            <span class="stat-sub">This billing cycle</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Artists Supported</span>
+            <span class="stat-value text-emerald" id="royalty-artists-count">4 Artists</span>
+            <span class="stat-sub">Direct allocation</span>
+          </div>
+        </div>
+
+        <div class="breakdown-card">
+          <h3>Your Direct Artist Payout Statement</h3>
+          <div class="table-container">
+            <table class="reconcile-table">
+              <thead>
+                <tr>
+                  <th>Artist</th>
+                  <th>Your Plays</th>
+                  <th>Share %</th>
+                  <th>From Subscription</th>
+                  <th>Direct Fan Tips</th>
+                  <th>Total Sent to Artist</th>
+                </tr>
+              </thead>
+              <tbody id="royalty-table-body">
+                <!-- Injected via JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Persistent Full Player Bar (SRS FR-003, FR-004, FR-023) -->
+  <footer class="player-bar">
+    <!-- Visualizer Canvas -->
+    <canvas id="visualizer-canvas" class="visualizer"></canvas>
+
+    <div class="player-content">
+      <!-- Now Playing Track Info -->
+      <div class="now-playing-left">
+        <img id="current-cover" src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80" alt="Album Art" class="now-playing-art">
+        <div class="now-playing-meta">
+          <span class="track-title" id="current-title">Cosmic Horizon</span>
+          <span class="artist-name" id="current-artist">Solaris Echo</span>
+          <div class="honesty-pill" id="current-honesty-pill">
+            <span class="dot"></span>
+            <span id="current-badge-text">24-bit / 96 kHz FLAC HI-RES</span>
+          </div>
+        </div>
+        <button class="icon-btn" onclick="toggleFavorite()" title="Like Track">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="#8b5cf6" stroke="#8b5cf6" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+        </button>
+      </div>
+
+      <!-- Player Controls -->
+      <div class="player-center">
+        <div class="transport-controls">
+          <button class="control-btn" id="btn-shuffle-toggle" onclick="cycleShuffleMode()" title="Toggle Shuffle Mode">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 3 21 3 21 8"></polyline><line x1="4" y1="20" x2="21" y2="3"></line><polyline points="21 16 21 21 16 21"></polyline><line x1="15" y1="15" x2="21" y2="21"></line><line x1="4" y1="4" x2="9" y2="9"></line></svg>
+          </button>
+          <button class="control-btn" onclick="prevTrack()" title="Previous">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" stroke-width="3"></line></svg>
+          </button>
+          <button class="play-pause-btn" id="btn-play-pause" onclick="togglePlayPause()" title="Play/Pause">
+            <svg id="icon-play" width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            <svg id="icon-pause" width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="display: none;"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+          </button>
+          <button class="control-btn" onclick="nextTrack()" title="Next">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="3"></line></svg>
+          </button>
+          <button class="control-btn" onclick="openArtistSupport()" title="Direct Artist Support">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+          </button>
+        </div>
+
+        <div class="progress-bar-container">
+          <span class="time-label" id="current-time-label">0:00</span>
+          <div class="progress-track" id="progress-track" onclick="handleSeek(event)">
+            <div class="progress-fill" id="progress-fill" style="width: 0%;"></div>
+          </div>
+          <span class="time-label" id="total-time-label">4:08</span>
+        </div>
+      </div>
+
+      <!-- Right Controls: Volume, Lyrics, Support, Download -->
+      <div class="player-right">
+        <button class="action-pill-btn download-btn" id="btn-download-current" onclick="downloadCurrentTrack()" title="Download song for offline listening">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          <span id="download-btn-text">Download</span>
+        </button>
+        <button class="action-pill-btn support-btn" onclick="openArtistSupport()">
+          <span>Tip Artist</span>
+        </button>
+        <button class="icon-btn lyrics-btn" onclick="toggleLyricsModal()" title="View Lyrics">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+        </button>
+        <div class="volume-slider-group">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+          <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="0.85" oninput="handleVolume(this.value)">
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Toast Notification -->
+  <div class="toast-notification" id="toast-banner">
+    <span class="toast-icon">📥</span>
+    <div class="toast-text">
+      <strong id="toast-title">Download Started</strong>
+      <span id="toast-msg">Fetching high-quality audio stream...</span>
+    </div>
+  </div>
+
+  <!-- Direct Artist Support Modal (SRS FR-019) -->
+  <div class="modal-overlay" id="support-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Direct Artist Support</h3>
+        <button class="close-btn" onclick="closeArtistSupport()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-lead">Support <strong id="support-artist-name">Solaris Echo</strong> directly. 90% of your contribution is immediately credited to the artist's verified account.</p>
+        <div class="tip-options">
+          <button class="tip-btn active" onclick="selectTip(2, this)">$2</button>
+          <button class="tip-btn" onclick="selectTip(5, this)">$5</button>
+          <button class="tip-btn" onclick="selectTip(10, this)">$10</button>
+          <button class="tip-btn" onclick="selectTip(25, this)">$25</button>
+        </div>
+        <button class="pay-btn" onclick="executeDirectTip()">
+          <span>Confirm $2 Contribution</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lyrics Modal (SRS FR-023) -->
+  <div class="modal-overlay" id="lyrics-modal">
+    <div class="modal-card lyrics-card">
+      <div class="modal-header">
+        <h3 id="lyrics-track-title">Cosmic Horizon — Lyrics</h3>
+        <button class="close-btn" onclick="toggleLyricsModal()">&times;</button>
+      </div>
+      <div class="modal-body lyrics-body" id="lyrics-content">
+        <!-- Injected -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Audio Element -->
+  <audio id="audio-engine" preload="auto" crossorigin="anonymous"></audio>
+
+  <script src="app.js"></script>
+</body>
+</html>

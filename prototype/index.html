@@ -81,10 +81,16 @@
             <button class="source-pill" id="src-lossless" onclick="setSearchSource('lossless')">Lossless Masters</button>
           </div>
         </div>
-        <div class="user-pill">
-          <span class="avatar">DY</span>
-          <span class="username">Dev Kumar</span>
-          <span class="user-tier-badge">AUDIOPHILE TIER</span>
+        <div class="topbar-right" style="display: flex; align-items: center; gap: 10px;">
+          <button id="api-status-pill" class="api-status-btn" onclick="openApiSettings()" title="Click to view or update your Backend API URL">
+            <span class="status-dot"></span>
+            <span id="api-status-label">Cloud API</span>
+          </button>
+          <div class="user-pill">
+            <span class="avatar">DY</span>
+            <span class="username">Dev Kumar</span>
+            <span class="user-tier-badge">AUDIOPHILE TIER</span>
+          </div>
         </div>
       </header>
 

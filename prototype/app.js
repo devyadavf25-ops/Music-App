@@ -199,7 +199,53 @@ document.addEventListener("DOMContentLoaded", () => {
   initRoyaltiesView();
   renderOfflineDownloads();
   loadOfflineDownloads();
+  checkApiHealth();
 });
+
+async function checkApiHealth() {
+  const pill = document.getElementById("api-status-pill");
+  const label = document.getElementById("api-status-label");
+  if (!pill || !label) return;
+
+  try {
+    const healthUrl = `${API_BASE.replace(/\/api\/v1\/?$/, "")}/`;
+    const res = await fetch(healthUrl);
+    if (res.ok) {
+      const data = await res.json();
+      pill.classList.remove("error");
+      pill.classList.add("connected");
+      label.innerText = data.database === "connected" ? "Cloud API & DB Live" : "Cloud API Online";
+      return;
+    }
+  } catch (e) {
+    console.warn("API health check:", e);
+  }
+
+  pill.classList.remove("connected");
+  pill.classList.add("error");
+  label.innerText = "Connect API";
+}
+
+function openApiSettings() {
+  const current = API_BASE.replace(/\/api\/v1\/?$/, "");
+  const input = prompt(
+    "Aura Music Platform — Backend Connection Settings\n\nEnter your Render Backend URL:\nExample: https://aura-music-api.onrender.com",
+    current
+  );
+
+  if (input !== null) {
+    let clean = input.trim().replace(/\/$/, "");
+    if (clean) {
+      if (!clean.endsWith("/api/v1")) {
+        clean += "/api/v1";
+      }
+      localStorage.setItem("AURA_API_URL", clean);
+    } else {
+      localStorage.removeItem("AURA_API_URL");
+    }
+    window.location.reload();
+  }
+}
 
 // Tab Switching
 function switchTab(tab) {
@@ -218,7 +264,9 @@ function switchTab(tab) {
   }
 }
 
-// Search & YouTube Integration (SRS FR-011, FR-012)
+// Search & Music Discovery Engine (SRS FR-011, FR-012)
+let searchAbortController = null;
+
 function setSearchSource(source) {
   searchSource = source;
   document.querySelectorAll(".source-pill").forEach(el => el.classList.remove("active"));
@@ -249,22 +297,60 @@ function handleSearch(query) {
 
   if (!trimmed) {
     if (spinner) spinner.style.display = "none";
+    if (searchAbortController) {
+      searchAbortController.abort();
+      searchAbortController = null;
+    }
+    activeTracks = [...CATALOG_TRACKS];
     reRankRecommendations();
     return;
   }
 
+  // 1. INSTANT LOCAL FILTER (0ms latency): show matching catalog tracks right away
+  if (searchSource !== "youtube") {
+    const qLower = trimmed.toLowerCase();
+    const instantMatches = CATALOG_TRACKS.filter(t => 
+      t.title.toLowerCase().includes(qLower) ||
+      t.artist_name.toLowerCase().includes(qLower) ||
+      t.album_title.toLowerCase().includes(qLower) ||
+      t.genre_name.toLowerCase().includes(qLower)
+    ).map(t => ({
+      ...t,
+      dynamicScore: 98,
+      explanation: `Verified Lossless Master · Matched "${trimmed}"`
+    }));
+
+    if (instantMatches.length > 0) {
+      activeTracks = instantMatches;
+      renderTracks();
+      const caption = document.getElementById("feed-caption");
+      if (caption) {
+        caption.innerText = searchSource === "all"
+          ? `Found ${instantMatches.length} instant catalog tracks · Searching global music...`
+          : `Found ${instantMatches.length} lossless master tracks for "${trimmed}"`;
+      }
+    }
+  }
+
   if (spinner) spinner.style.display = "inline-block";
 
+  // 2. Debounce cloud/backend search by 180ms
   searchDebounceTimer = setTimeout(() => {
     executeSearch(trimmed);
-  }, 350);
+  }, 180);
 }
 
 async function executeSearch(query) {
   const spinner = document.getElementById("search-spinner");
   switchTab("home");
 
-  // Local catalog matches
+  if (searchAbortController) {
+    searchAbortController.abort();
+  }
+  searchAbortController = new AbortController();
+  const signal = searchAbortController.signal;
+
+  // 1. Local catalog tracks
   let localMatches = [];
   if (searchSource !== "youtube") {
     const qLower = query.toLowerCase();
@@ -275,63 +361,91 @@ async function executeSearch(query) {
       t.genre_name.toLowerCase().includes(qLower)
     ).map(t => ({
       ...t,
-      dynamicScore: 95,
+      dynamicScore: 98,
       explanation: `Verified Lossless Master · Matched "${query}"`
     }));
   }
 
-  // YouTube search if source is "all" or "youtube"
-  let ytResults = [];
+  // 2. Query cloud/backend search (YouTube + iTunes fallback)
+  let cloudResults = [];
   if (searchSource === "all" || searchSource === "youtube") {
     try {
-      const res = await fetch(`${API_BASE}/youtube/search?q=${encodeURIComponent(query)}&limit=10`);
+      const res = await fetch(`${API_BASE}/youtube/search?q=${encodeURIComponent(query)}&limit=12`, { signal });
       if (res.ok) {
         const data = await res.json();
-        ytResults = (data || []).map(t => ({
+        cloudResults = (data || []).map(t => ({
           ...t,
-          dynamicScore: 90,
-          explanation: `YouTube Global Audio · High-bitrate direct stream`
+          dynamicScore: 92,
+          explanation: t.id.startsWith("itunes_")
+            ? `Global High-Fidelity Preview · Direct Audio Stream`
+            : `YouTube Global Audio · High-bitrate direct stream`
         }));
       }
     } catch (e) {
-      console.warn("YouTube search request failed:", e);
+      if (e.name !== "AbortError") {
+        console.warn("Cloud music search unavailable, local catalog preserved:", e);
+      }
     }
   }
 
+  if (spinner) spinner.style.display = "none";
+
   let finalResults = [];
   if (searchSource === "youtube") {
-    finalResults = ytResults;
+    finalResults = cloudResults;
   } else if (searchSource === "lossless") {
     finalResults = localMatches;
   } else {
-    // "all": prioritize exact catalog matches then YouTube tracks
-    finalResults = [...localMatches, ...ytResults];
+    // "all": Merge local catalog first, then unique cloud results
+    const localTitles = new Set(localMatches.map(t => t.title.toLowerCase().trim()));
+    const uniqueCloud = cloudResults.filter(t => !localTitles.has(t.title.toLowerCase().trim()));
+    finalResults = [...localMatches, ...uniqueCloud];
   }
-
-  if (spinner) spinner.style.display = "none";
 
   if (finalResults.length === 0) {
     activeTracks = [];
     renderTracks();
     const container = document.getElementById("track-list-container");
-    container.innerHTML = `
-      <div style="text-align: center; padding: 48px 20px; color: #94a3b8;">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom: 12px; color: #64748b; display: block; margin-left: auto; margin-right: auto;">
-          <circle cx="11" cy="11" r="8"></circle>
-          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-        </svg>
-        <h3 style="color: #fff; margin-bottom: 8px;">No tracks found for "${query}"</h3>
-        <p style="font-size: 14px; max-width: 400px; margin: 0 auto;">Try another keyword or switch source filter to "YouTube Global" to search millions of songs.</p>
-      </div>
-    `;
-    document.getElementById("feed-caption").innerText = `0 tracks found for "${query}" (${searchSource.toUpperCase()})`;
+    if (container) {
+      container.innerHTML = `
+        <div style="text-align: center; padding: 48px 20px; color: #94a3b8;">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom: 12px; color: #64748b; display: block; margin-left: auto; margin-right: auto;">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <h3 style="color: #fff; margin-bottom: 8px;">No tracks found for "${query}"</h3>
+          <p style="font-size: 14px; max-width: 440px; margin: 0 auto 16px auto; line-height: 1.5;">
+            Try another keyword or click any quick search below:
+          </p>
+          <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+            <button class="source-pill" onclick="searchFor('Solaris Echo')">Solaris Echo</button>
+            <button class="source-pill" onclick="searchFor('Neon Drift')">Neon Drift</button>
+            <button class="source-pill" onclick="searchFor('Adele')">Adele</button>
+            <button class="source-pill" onclick="searchFor('Coldplay')">Coldplay</button>
+            <button class="source-pill" onclick="searchFor('Synthwave')">Synthwave</button>
+          </div>
+        </div>
+      `;
+    }
+    const caption = document.getElementById("feed-caption");
+    if (caption) caption.innerText = `0 tracks found for "${query}" (${searchSource.toUpperCase()})`;
     return;
   }
 
   activeTracks = finalResults;
   renderTracks();
-  document.getElementById("feed-caption").innerText = `Found ${finalResults.length} tracks for "${query}" (${searchSource.toUpperCase()})`;
-  showToast("Search Complete", `Showing ${finalResults.length} results for "${query}"`, "🔍");
+  const caption = document.getElementById("feed-caption");
+  if (caption) {
+    caption.innerText = `Found ${finalResults.length} tracks for "${query}" (${searchSource.toUpperCase()})`;
+  }
+}
+
+function searchFor(term) {
+  const input = document.getElementById("search-input");
+  if (input) {
+    input.value = term;
+    handleSearch(term);
+  }
 }
 
 // 0–100% Variance Slider (SRS FR-005, FR-006, FR-007)
@@ -531,6 +645,7 @@ function loadCurrentTrack(track) {
   document.getElementById("lyrics-content").innerText = track.lyrics || "— Instrumental Piece —";
 
   const isYouTube = track.id.startsWith("yt_");
+  const isItunes = track.id.startsWith("itunes_");
 
   // Technical Honesty Badge (FR-004)
   let badgeText = `${track.bit_depth}-bit / ${track.sample_rate / 1000} kHz ${track.audio_format.toUpperCase()}`;
@@ -541,6 +656,9 @@ function loadCurrentTrack(track) {
   } else if (isYouTube) {
     badgeText = "16-bit / 48 kHz AAC (YouTube Direct)";
     statusText = "Live YouTube Stream";
+  } else if (isItunes) {
+    badgeText = "16-bit / 44.1 kHz AAC (Direct Audio)";
+    statusText = "Instant Master Stream";
   }
 
   document.getElementById("current-badge-text").innerText = badgeText;
@@ -555,8 +673,10 @@ function loadCurrentTrack(track) {
   if (!track.offlineUrl) {
     if (isYouTube) {
       const videoId = track.id.replace("yt_", "");
-      document.getElementById("current-badge-text").innerText = "Loading YouTube Audio...";
+      document.getElementById("current-badge-text").innerText = "Connecting YouTube Stream...";
       audio.src = `${API_BASE}/youtube/audio/${videoId}`;
+    } else if (track.stream_url && track.stream_url.startsWith("http")) {
+      audio.src = track.stream_url;
     } else {
       audio.src = `${API_BASE}/catalog/audio/${track.id}`;
     }
@@ -795,78 +915,6 @@ function toggleLyricsModal() {
 
 function toggleFavorite() {
   alert(`Added "${currentTrack.title}" by ${currentTrack.artist_name} to your Favorites! Haptic feedback triggered.`);
-}
-
-function setSearchSource(src) {
-  searchSource = src;
-  document.querySelectorAll(".source-pill").forEach(el => el.classList.remove("active"));
-  
-  if (src === "all") document.getElementById("src-all").classList.add("active");
-  if (src === "youtube") document.getElementById("src-yt").classList.add("active");
-  if (src === "lossless") document.getElementById("src-lossless").classList.add("active");
-
-  const currentVal = document.getElementById("search-input").value;
-  if (currentVal.trim()) {
-    handleSearch(currentVal, true);
-  }
-}
-
-function handleSearch(q, immediate = false) {
-  clearTimeout(searchDebounceTimer);
-  const query = q.trim();
-  const spinner = document.getElementById("search-spinner");
-
-  if (!query) {
-    spinner.style.display = "none";
-    activeTracks = [...CATALOG_TRACKS];
-    reRankRecommendations();
-    return;
-  }
-
-  const delay = immediate ? 0 : 350;
-  searchDebounceTimer = setTimeout(async () => {
-    // 1. Filter local lossless tracks
-    let localMatches = [];
-    if (searchSource !== "youtube") {
-      const qLower = query.toLowerCase();
-      localMatches = CATALOG_TRACKS.filter(t => 
-        t.title.toLowerCase().includes(qLower) ||
-        t.artist_name.toLowerCase().includes(qLower) ||
-        t.album_title.toLowerCase().includes(qLower) ||
-        (t.isrc && t.isrc.toLowerCase().includes(qLower))
-      );
-    }
-
-    // 2. If source includes YouTube, query YouTube search API
-    let ytMatches = [];
-    if (searchSource === "all" || searchSource === "youtube") {
-      spinner.style.display = "inline-block";
-      try {
-        const res = await fetch(`${API_BASE}/youtube/search?q=${encodeURIComponent(query)}&limit=8`);
-        if (res.ok) {
-          ytMatches = await res.json();
-        }
-      } catch (e) {
-        console.warn("YouTube search API unavailable, using local catalog only:", e);
-      } finally {
-        spinner.style.display = "none";
-      }
-    }
-
-    // Merge results
-    if (searchSource === "youtube") {
-      activeTracks = ytMatches;
-      document.getElementById("feed-caption").innerText = `Found ${ytMatches.length} live YouTube tracks for "${query}"`;
-    } else if (searchSource === "lossless") {
-      activeTracks = localMatches;
-      document.getElementById("feed-caption").innerText = `Found ${localMatches.length} lossless master tracks for "${query}"`;
-    } else {
-      activeTracks = [...localMatches, ...ytMatches];
-      document.getElementById("feed-caption").innerText = `Found ${localMatches.length} catalog tracks + ${ytMatches.length} YouTube tracks for "${query}"`;
-    }
-
-    renderTracks();
-  }, delay);
 }
 
 // Direct Track Download (SRS FR-011, FR-012)

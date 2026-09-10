@@ -26,8 +26,9 @@ services:
           property: connectionString
 
   # 2. Web Prototype Companion (Static Site)
-  - type: static
+  - type: web
     name: aura-music-prototype
+    runtime: static
     staticPublishPath: ./prototype
     plan: free
     routes:

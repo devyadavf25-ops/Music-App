@@ -1,3 +1,10 @@
+databases:
+  - name: aura-music-db
+    databaseName: aura_music
+    user: aura_admin
+    plan: free
+    region: oregon
+
 services:
   # 1. Backend FastAPI Service (Docker)
   - type: web
@@ -13,6 +20,10 @@ services:
         value: 10000
       - key: CORS_ORIGINS
         value: "*"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: aura-music-db
+          property: connectionString
 
   # 2. Web Prototype Companion (Static Site)
   - type: static

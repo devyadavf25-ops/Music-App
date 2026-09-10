@@ -30,7 +30,6 @@ services:
     name: aura-music-prototype
     runtime: static
     staticPublishPath: ./prototype
-    plan: free
     routes:
       - type: rewrite
         source: /*

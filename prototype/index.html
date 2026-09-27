@@ -8,6 +8,18 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  
+  <!-- Progressive Web App (PWA) & Offline Capabilities -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta name="theme-color" content="#0a0c14">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Aura Music">
+  
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -96,6 +108,12 @@
               <span class="slider"></span>
             </label>
           </div>
+
+          <!-- Install App to Phone Button -->
+          <button id="pwa-install-btn" class="pwa-install-btn" style="display: none;" onclick="triggerPwaInstall()" title="Install Aura Music to your Phone Home Screen">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            <span>Install App</span>
+          </button>
 
           <!-- Import Audio File -->
           <button class="import-top-btn" onclick="document.getElementById('file-picker-hidden').click()" title="Import local MP3, M4A, FLAC, or WAV songs to offline library">
@@ -651,6 +669,50 @@
 
   <!-- Audio Element -->
   <audio id="audio-engine" preload="auto" crossorigin="anonymous"></audio>
+
+  <!-- iOS Add to Home Screen Guided Modal -->
+  <div class="modal-overlay" id="ios-pwa-modal" style="display: none;">
+    <div class="modal-card ios-pwa-card">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <img src="apple-touch-icon.png" alt="Aura Logo" style="width: 32px; height: 32px; border-radius: 8px;">
+          <h3 style="margin: 0; font-size: 16px;">Add to Phone Home Screen</h3>
+        </div>
+        <button class="close-btn" onclick="closeIosPwaModal()">&times;</button>
+      </div>
+      <div class="modal-body" style="padding-top: 12px;">
+        <p style="font-size: 13px; color: var(--text-dim); margin-bottom: 16px; line-height: 1.5;">
+          Install Aura Music on your phone to open instantly and play downloaded songs with <strong>100% zero internet</strong>!
+        </p>
+        <div class="ios-install-steps">
+          <div class="ios-step-item">
+            <div class="step-badge">1</div>
+            <div>
+              <strong>Tap the Share Button</strong>
+              <p>At the bottom or top of Safari, tap the <span class="share-icon-inline">⎋</span> Share icon.</p>
+            </div>
+          </div>
+          <div class="ios-step-item">
+            <div class="step-badge">2</div>
+            <div>
+              <strong>Select "Add to Home Screen"</strong>
+              <p>Scroll down the options list and tap <strong>"Add to Home Screen ⊞"</strong>.</p>
+            </div>
+          </div>
+          <div class="ios-step-item">
+            <div class="step-badge">3</div>
+            <div>
+              <strong>Launch & Listen Offline</strong>
+              <p>Open Aura Music right from your Home Screen. It works without internet like a native app!</p>
+            </div>
+          </div>
+        </div>
+        <button class="pay-btn" style="margin-top: 18px;" onclick="closeIosPwaModal()">
+          <span>Got it! Let's Listen</span>
+        </button>
+      </div>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>

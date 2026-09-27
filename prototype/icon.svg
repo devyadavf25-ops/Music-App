@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0c14" />
+      <stop offset="50%" stop-color="#131726" />
+      <stop offset="100%" stop-color="#07080d" />
+    </linearGradient>
+    <linearGradient id="primaryGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8b5cf6" />
+      <stop offset="100%" stop-color="#3b82f6" />
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981" />
+      <stop offset="100%" stop-color="#06b6d4" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="16" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Background rounded rectangle -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)" />
+  <rect width="510" height="510" x="1" y="1" rx="111" fill="none" stroke="rgba(139, 92, 246, 0.35)" stroke-width="2" />
+
+  <!-- Outer Vinyl Glow & Ring -->
+  <circle cx="256" cy="256" r="180" fill="none" stroke="rgba(255, 255, 255, 0.05)" stroke-width="2" />
+  <circle cx="256" cy="256" r="140" fill="none" stroke="rgba(139, 92, 246, 0.15)" stroke-width="1.5" />
+  <circle cx="256" cy="256" r="100" fill="none" stroke="rgba(16, 185, 129, 0.2)" stroke-width="1.5" />
+
+  <!-- Core Glowing Aura Ring -->
+  <circle cx="256" cy="256" r="160" fill="none" stroke="url(#primaryGrad)" stroke-width="12" filter="url(#glow)" opacity="0.8" />
+  <circle cx="256" cy="256" r="160" fill="none" stroke="url(#primaryGrad)" stroke-width="6" />
+
+  <!-- Musical Note Glyph -->
+  <g transform="translate(196, 160)" filter="url(#glow)">
+    <!-- Stems and beam -->
+    <path d="M 32 160 L 32 30 C 32 20 40 12 50 14 L 110 24 C 118 26 124 33 124 41 L 124 140" fill="none" stroke="url(#primaryGrad)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M 32 38 L 124 50" stroke="url(#primaryGrad)" stroke-width="16" stroke-linecap="round" />
+    <!-- Note heads -->
+    <ellipse cx="14" cy="160" rx="26" ry="20" transform="rotate(-20 14 160)" fill="url(#accentGrad)" />
+    <ellipse cx="106" cy="140" rx="26" ry="20" transform="rotate(-20 106 140)" fill="url(#accentGrad)" />
+  </g>
+
+  <!-- Pulse dots -->
+  <circle cx="256" cy="72" r="6" fill="#10b981" filter="url(#glow)" />
+  <circle cx="440" cy="256" r="6" fill="#8b5cf6" filter="url(#glow)" />
+  <circle cx="256" cy="440" r="6" fill="#06b6d4" filter="url(#glow)" />
+  <circle cx="72" cy="256" r="6" fill="#a855f7" filter="url(#glow)" />
+
+  <!-- AURA Brand Wordmark -->
+  <text x="256" y="468" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="28" font-weight="900" letter-spacing="8" fill="#ffffff">AURA</text>
+</svg>

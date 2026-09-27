@@ -686,6 +686,7 @@ function loadCurrentTrack(track) {
     }
   }
   audio.load();
+  updateMediaSession(track);
 }
 
 function selectTrack(index) {
@@ -1447,3 +1448,139 @@ loadOfflineDownloads = async function() {
   updateOfflineBadge();
   renderOfflineVault();
 };
+
+// ================================================================
+// PROGRESSIVE WEB APP (PWA) & MOBILE HOME SCREEN CAPABILITIES
+// ================================================================
+
+let deferredPrompt = null;
+
+// 1. Service Worker Registration for 100% Offline Loading
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker
+      .register("./sw.js")
+      .then((reg) => {
+        console.log("[Aura PWA] Service Worker registered successfully, scope:", reg.scope);
+      })
+      .catch((err) => {
+        console.warn("[Aura PWA] Service Worker registration failed:", err);
+      });
+  });
+}
+
+// 2. Lock-Screen & Mobile Notification Audio Controls (MediaSession API)
+function updateMediaSession(track) {
+  if (!("mediaSession" in navigator) || !track) return;
+
+  const artworkUrl = track.cover_art_url || "icon-512.png";
+  navigator.mediaSession.metadata = new MediaMetadata({
+    title: track.title,
+    artist: track.artist_name,
+    album: track.album_title || "Aura Offline Vault",
+    artwork: [
+      { src: artworkUrl, sizes: "192x192", type: "image/png" },
+      { src: artworkUrl, sizes: "512x512", type: "image/png" }
+    ]
+  });
+
+  try {
+    navigator.mediaSession.setActionHandler("play", () => playAudio());
+    navigator.mediaSession.setActionHandler("pause", () => pauseAudio());
+    navigator.mediaSession.setActionHandler("previoustrack", () => previousTrack());
+    navigator.mediaSession.setActionHandler("nexttrack", () => nextTrack());
+    navigator.mediaSession.setActionHandler("seekbackward", () => {
+      audio.currentTime = Math.max(audio.currentTime - 10, 0);
+    });
+    navigator.mediaSession.setActionHandler("seekforward", () => {
+      audio.currentTime = Math.min(audio.currentTime + 10, audio.duration || 0);
+    });
+  } catch (e) {
+    console.debug("MediaSession actions error:", e);
+  }
+}
+
+// 3. PWA Install Prompt Listener (Android / Desktop Chrome / Edge)
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  const btn = document.getElementById("pwa-install-btn");
+  if (btn) btn.style.display = "inline-flex";
+});
+
+window.addEventListener("appinstalled", () => {
+  deferredPrompt = null;
+  const btn = document.getElementById("pwa-install-btn");
+  if (btn) btn.style.display = "none";
+  showToast("App Installed!", "Aura Music is now on your Home Screen. Open anytime offline!", "🎉");
+});
+
+// Detect iOS devices
+function isIosDevice() {
+  const userAgent = window.navigator.userAgent.toLowerCase();
+  return /iphone|ipad|ipod/.test(userAgent);
+}
+
+// Check if running in standalone mode (already added to home screen)
+function isRunningStandalone() {
+  return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+}
+
+function triggerPwaInstall() {
+  if (isRunningStandalone()) {
+    showToast("Already Installed", "Aura Music is running directly from your Home Screen!", "📱");
+    return;
+  }
+
+  if (deferredPrompt) {
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then((choiceResult) => {
+      if (choiceResult.outcome === "accepted") {
+        showToast("Installing App", "Adding Aura Music to your Home Screen...", "📥");
+      }
+      deferredPrompt = null;
+    });
+    return;
+  }
+
+  // If on iOS or browser without beforeinstallprompt, open guided instructions
+  openIosPwaModal();
+}
+
+function openIosPwaModal() {
+  const modal = document.getElementById("ios-pwa-modal");
+  if (modal) modal.style.display = "flex";
+}
+
+function closeIosPwaModal() {
+  const modal = document.getElementById("ios-pwa-modal");
+  if (modal) modal.style.display = "none";
+}
+
+// Show install button on mobile browsers if not already standalone
+document.addEventListener("DOMContentLoaded", () => {
+  const btn = document.getElementById("pwa-install-btn");
+  if (btn && !isRunningStandalone()) {
+    // Show install button on mobile or when supported
+    if (isIosDevice() || window.innerWidth <= 768) {
+      btn.style.display = "inline-flex";
+    }
+  }
+
+  // Auto-detect if device opens with NO internet: activate Offline Vault immediately
+  if (!navigator.onLine) {
+    console.log("[Aura] Offline launch detected. Switching to offline vault.");
+    toggleOfflineMode(true);
+  }
+});
+
+// Real-time network transitions
+window.addEventListener("offline", () => {
+  toggleOfflineMode(true);
+  showToast("Airplane Mode", "Zero internet detected. Playing from offline vault.", "✈️");
+});
+
+window.addEventListener("online", () => {
+  showToast("Internet Connected", "Cloud streaming re-enabled.", "🌐");
+});
+

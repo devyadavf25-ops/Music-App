@@ -38,6 +38,7 @@ if DATABASE_URL.startswith("sqlite"):
     engine_kwargs["connect_args"] = {"check_same_thread": False}
 else:
     engine_kwargs["pool_pre_ping"] = True
+    engine_kwargs["pool_recycle"] = 300
     engine_kwargs["pool_size"] = 10
     engine_kwargs["max_overflow"] = 20
 

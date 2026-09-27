@@ -227,24 +227,69 @@ async function checkApiHealth() {
 }
 
 function openApiSettings() {
+  const modal = document.getElementById("api-settings-modal");
+  if (!modal) return;
   const current = API_BASE.replace(/\/api\/v1\/?$/, "");
-  const input = prompt(
-    "Aura Music Platform — Backend Connection Settings\n\nEnter your Render Backend URL:\nExample: https://aura-music-api.onrender.com",
-    current
-  );
+  const input = document.getElementById("backend-url-input");
+  if (input) input.value = current;
+  modal.style.display = "flex";
+  testBackendConnection();
+}
 
-  if (input !== null) {
-    let clean = input.trim().replace(/\/$/, "");
-    if (clean) {
-      if (!clean.endsWith("/api/v1")) {
-        clean += "/api/v1";
+function closeApiSettings() {
+  const modal = document.getElementById("api-settings-modal");
+  if (modal) modal.style.display = "none";
+}
+
+async function testBackendConnection() {
+  const statusEl = document.getElementById("db-status-display");
+  const typeEl = document.getElementById("db-type-display");
+  const input = document.getElementById("backend-url-input");
+  const urlToTest = (input && input.value ? input.value : API_BASE).trim().replace(/\/api\/v1\/?$/, "");
+
+  if (statusEl) statusEl.innerHTML = `<span class="search-spinner" style="display:inline-block; vertical-align:middle; width:12px; height:12px; margin-right:6px;"></span> Checking Backend & PostgreSQL...`;
+
+  try {
+    const res = await fetch(`${urlToTest}/`, { cache: "no-store" });
+    if (res.ok) {
+      const data = await res.json();
+      const isPg = (data.database_type === "postgresql") || (data.database && data.database.toLowerCase().includes("connected"));
+      if (statusEl) {
+        statusEl.innerHTML = `<strong class="text-emerald">&#10003; Database ${data.database || "Connected"}</strong><br><small style="color: var(--text-dim);">Environment: ${data.environment || "Production"}</small>`;
       }
-      localStorage.setItem("AURA_API_URL", clean);
-    } else {
-      localStorage.removeItem("AURA_API_URL");
+      if (typeEl) {
+        typeEl.innerHTML = isPg 
+          ? `<span class="badge-pg" style="background: rgba(16,185,129,0.15); color: #34d399; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 700;">🐘 PostgreSQL 16</span>`
+          : `<span class="badge-sqlite" style="background: rgba(139,92,246,0.15); color: #c4b5fd; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 700;">SQLite Storage</span>`;
+      }
+      return;
     }
-    window.location.reload();
+    throw new Error(`HTTP ${res.status}`);
+  } catch (err) {
+    if (statusEl) {
+      statusEl.innerHTML = `<span style="color: #f87171;">✕ Backend waking up or offline (${err.message}).<br><small style="color: var(--text-dim);">Searches will use direct global music engine automatically.</small></span>`;
+    }
+    if (typeEl) {
+      typeEl.innerHTML = `<span style="color: var(--text-dim); font-size: 11px;">Pending Wakeup</span>`;
+    }
   }
+}
+
+function saveApiSettings() {
+  const input = document.getElementById("backend-url-input");
+  if (!input) return;
+  let clean = input.value.trim().replace(/\/$/, "");
+  if (clean) {
+    if (!clean.endsWith("/api/v1")) {
+      clean += "/api/v1";
+    }
+    localStorage.setItem("AURA_API_URL", clean);
+  } else {
+    localStorage.removeItem("AURA_API_URL");
+  }
+  closeApiSettings();
+  showToast("Settings Saved", "Connecting to specified backend...", "⚡");
+  setTimeout(() => window.location.reload(), 400);
 }
 
 // Tab Switching
@@ -370,24 +415,62 @@ async function executeSearch(query) {
     }));
   }
 
-  // 2. Query cloud/backend search (YouTube + iTunes fallback)
+  // 2. Query cloud/backend search (YouTube + Backend)
   let cloudResults = [];
   if (searchSource === "all" || searchSource === "youtube") {
     try {
-      const res = await fetch(`${API_BASE}/youtube/search?q=${encodeURIComponent(query)}&limit=12`, { signal });
-      if (res.ok) {
+      // 3.0s timeout so mobile search never hangs if backend is spinning up
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 3000));
+      const fetchPromise = fetch(`${API_BASE}/youtube/search?q=${encodeURIComponent(query)}&limit=15`, { signal });
+      const res = await Promise.race([fetchPromise, timeoutPromise]);
+      if (res && res.ok) {
         const data = await res.json();
         cloudResults = (data || []).map(t => ({
           ...t,
-          dynamicScore: 92,
+          dynamicScore: 95,
           explanation: t.id.startsWith("itunes_")
-            ? `Global High-Fidelity Preview · Direct Audio Stream`
-            : `YouTube Global Audio · High-bitrate direct stream`
+            ? `Global High-Fidelity Audio · Instant Stream`
+            : `YouTube Global Audio · High-bitrate stream`
         }));
       }
     } catch (e) {
-      if (e.name !== "AbortError") {
-        console.warn("Cloud music search unavailable, local catalog preserved:", e);
+      console.warn("Backend search busy or waking up, engaging instant global music fallback:", e);
+    }
+
+    // 3. Resilient Client-Side Global Music Search Fallback (Zero Backend Required)
+    if (cloudResults.length === 0) {
+      try {
+        const itunesUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&limit=25`;
+        const iRes = await fetch(itunesUrl);
+        if (iRes.ok) {
+          const iData = await iRes.json();
+          cloudResults = (iData.results || []).map((item, idx) => ({
+            id: `itunes_${item.trackId}`,
+            title: item.trackName || "Unknown Song",
+            artist_name: item.artistName || "Unknown Artist",
+            artist_id: `art_itunes_${item.artistId || idx}`,
+            album_title: item.collectionName || "Single",
+            album_id: `alb_itunes_${item.collectionId || idx}`,
+            duration_seconds: Math.round((item.trackTimeMillis || 180000) / 1000),
+            track_number: item.trackNumber || (idx + 1),
+            genre_name: item.primaryGenreName || "Music",
+            stream_url: item.previewUrl,
+            cover_art_url: (item.artworkUrl100 || "").replace("100x100bb.jpg", "600x600bb.jpg") || "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&auto=format&fit=crop&q=80",
+            audio_format: "aac_256",
+            sample_rate: 44100,
+            bit_depth: 16,
+            bpm: 120,
+            musical_key: "C Major",
+            energy: 0.75,
+            valence: 0.65,
+            acousticness: 0.25,
+            popularity: 90,
+            dynamicScore: 92,
+            explanation: `Global Master Recording · Instant Mobile Stream`
+          }));
+        }
+      } catch (err) {
+        console.warn("Client-side direct music fallback error:", err);
       }
     }
   }
@@ -940,9 +1023,11 @@ async function downloadTrack(trackId) {
   updateCurrentDownloadButton();
 
   try {
-    const audioURL = track.id.startsWith("yt_")
-      ? `${API_BASE}/youtube/audio/${track.id.replace("yt_", "")}`
-      : `${API_BASE}/catalog/audio/${track.id}`;
+    const audioURL = (track.stream_url && track.stream_url.startsWith("http") && !track.id.startsWith("yt_"))
+      ? track.stream_url
+      : (track.id.startsWith("yt_")
+          ? `${API_BASE}/youtube/audio/${track.id.replace("yt_", "")}`
+          : `${API_BASE}/catalog/audio/${track.id}`);
     const response = await fetch(audioURL);
     if (!response.ok) throw new Error(`Download failed (${response.status})`);
 

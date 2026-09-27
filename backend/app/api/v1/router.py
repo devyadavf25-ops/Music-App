@@ -382,6 +382,35 @@ async def search_youtube(q: str = Query(..., min_length=1), limit: int = Query(8
     return await YouTubeService.search(q, limit=limit)
 
 
+@api_router.get("/youtube/resolve")
+async def resolve_full_song(
+    title: str = Query(..., min_length=1),
+    artist: Optional[str] = Query("")
+):
+    """
+    Resolves any track title and artist to a full-length YouTube audio stream.
+    Replaces 30-second previews with full audio playback.
+    """
+    query = f"{artist} {title}".strip()
+    try:
+        results = await YouTubeService.search(query, limit=1)
+        if results and results[0].id.startswith("yt_"):
+            t = results[0]
+            vid = t.id.replace("yt_", "")
+            return {
+                "found": True,
+                "video_id": vid,
+                "title": t.title,
+                "artist_name": t.artist_name,
+                "duration_seconds": t.duration_seconds,
+                "stream_url": f"/api/v1/youtube/audio/{vid}",
+                "cover_art_url": t.cover_art_url
+            }
+    except Exception as e:
+        logger.warning("Error resolving full song for '%s': %s", query, e)
+    return {"found": False, "detail": "No full length stream match found"}
+
+
 @api_router.get("/youtube/stream/{video_id}")
 async def get_youtube_stream(video_id: str, request: Request):
     """
@@ -481,6 +510,26 @@ async def stream_catalog_audio(track_id: str):
         return await stream_youtube_audio(video_id)
 
     # Check registered iTunes / online tracks
+    if track_id.startswith("itunes_"):
+        reg_track = YouTubeService.get_registered_track(track_id)
+        if reg_track:
+            # Attempt to resolve full YouTube song stream instead of 30-second preview
+            try:
+                query = f"{reg_track.artist_name} {reg_track.title}".strip()
+                yt_results = await YouTubeService.search(query, limit=1)
+                if yt_results and yt_results[0].id.startswith("yt_"):
+                    yt_vid = yt_results[0].id.replace("yt_", "")
+                    return await stream_youtube_audio(yt_vid)
+            except Exception as e:
+                logger.warning("Failed to auto-resolve YouTube stream for %s: %s", track_id, e)
+
+        # Fallback to preview URL if full song resolution fails
+        preview_url = YouTubeService.get_itunes_preview(track_id)
+        if preview_url:
+            return RedirectResponse(url=preview_url, status_code=307)
+        if reg_track and reg_track.stream_url and reg_track.stream_url.startswith("http"):
+            return RedirectResponse(url=reg_track.stream_url, status_code=307)
+
     reg_track = YouTubeService.get_registered_track(track_id)
     if reg_track and reg_track.stream_url:
         if reg_track.stream_url.startswith("http"):

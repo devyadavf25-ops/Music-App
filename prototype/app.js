@@ -419,8 +419,8 @@ async function executeSearch(query) {
   let cloudResults = [];
   if (searchSource === "all" || searchSource === "youtube") {
     try {
-      // 3.0s timeout so mobile search never hangs if backend is spinning up
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 3000));
+      // 12.0s timeout to allow YouTube backend search to return full tracks directly
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 12000));
       const fetchPromise = fetch(`${API_BASE}/youtube/search?q=${encodeURIComponent(query)}&limit=15`, { signal });
       const res = await Promise.race([fetchPromise, timeoutPromise]);
       if (res && res.ok) {
@@ -429,8 +429,8 @@ async function executeSearch(query) {
           ...t,
           dynamicScore: 95,
           explanation: t.id.startsWith("itunes_")
-            ? `Global High-Fidelity Audio · Instant Stream`
-            : `YouTube Global Audio · High-bitrate stream`
+            ? `Global High-Fidelity Audio · Full Stream`
+            : `YouTube Global Audio · Full Song`
         }));
       }
     } catch (e) {
@@ -721,33 +721,34 @@ function cycleShuffleMode() {
 }
 
 // ========================================================
-// Mobile Snippet / Preview Engine (15s / 30s / Full)
-// On mobile devices, don't play full song — only play 30s or 15s
+// Playback Engine (Full Song Playback by default)
+// Allows full length listening across all mobile & desktop devices
 // ========================================================
 function isMobileDevice() {
   const ua = (navigator.userAgent || navigator.vendor || window.opera || "").toLowerCase();
   return /android|iphone|ipad|ipod|blackberry|iemobile|opera mini|mobile/i.test(ua) || window.innerWidth <= 768;
 }
 
-// Default to 30s on mobile devices, or 0 (full length) on desktop
+// Default to 0 (FULL LENGTH) for all devices so full songs play uninterrupted
 let snippetDuration = (() => {
   try {
     const saved = localStorage.getItem("aura_snippet_duration");
+    if (saved === "30" || saved === "15") {
+      // Clear legacy forced mobile clip limit so users get full songs
+      localStorage.removeItem("aura_snippet_duration");
+      return 0;
+    }
     if (saved !== null) {
       const val = parseInt(saved, 10);
-      if (isMobileDevice() && (val <= 0 || isNaN(val))) return 30; // Mobile devices strictly play 15s or 30s snippets
-      return val;
+      if (!isNaN(val) && val >= 0) return val;
     }
   } catch (_) {}
-  return isMobileDevice() ? 30 : 0;
+  return 0; // Default: 0 = Full song playback
 })();
 
 function setSnippetDuration(sec) {
   let secNum = parseInt(sec, 10);
-  if (isMobileDevice() && secNum <= 0) {
-    secNum = 30; // Enforce preview snippet mode on mobile
-    showToast("Mobile Preview", "On mobile devices, playback is limited to 15s or 30s clips.", "📱");
-  }
+  if (isNaN(secNum) || secNum < 0) secNum = 0;
   snippetDuration = secNum;
   try {
     localStorage.setItem("aura_snippet_duration", snippetDuration);
@@ -756,12 +757,12 @@ function setSnippetDuration(sec) {
   updateSnippetDisplay();
 
   if (snippetDuration > 0) {
-    showToast("Mobile Clip Mode", `Playing ${snippetDuration}s snippet previews with auto-advance.`, "⚡");
+    showToast("Clip Preview Mode", `Playing ${snippetDuration}s snippet previews with auto-advance.`, "⚡");
     if (audio.currentTime >= snippetDuration && isPlaying) {
       nextTrack();
     }
   } else {
-    showToast("Full Playback", "Playing full length tracks.", "🎧");
+    showToast("Full Playback", "Playing full length tracks from start to finish.", "🎧");
   }
 }
 
@@ -793,6 +794,41 @@ function updateSnippetDisplay() {
 }
 
 
+// Background resolver: replaces 30-second iTunes search clips with full-length YouTube songs
+async function resolveFullTrackForItunes(track) {
+  try {
+    const res = await fetch(`${API_BASE}/youtube/resolve?title=${encodeURIComponent(track.title)}&artist=${encodeURIComponent(track.artist_name || "")}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.found && data.video_id) {
+        const fullUrl = `${API_BASE}/youtube/audio/${data.video_id}`;
+        track.full_stream_url = fullUrl;
+        track.duration_seconds = data.duration_seconds || track.duration_seconds;
+        track.id = `yt_${data.video_id}`;
+        
+        // If this track is currently active, transition smoothly to the full length stream
+        if (currentTrack && (currentTrack.title === track.title)) {
+          const curTime = audio.currentTime;
+          const wasPlaying = !audio.paused;
+          audio.src = fullUrl;
+          audio.currentTime = curTime;
+          if (wasPlaying) {
+            audio.play().catch(e => console.warn("Seamless resume error:", e));
+          }
+          const totalTimeLabel = document.getElementById("total-time-label");
+          if (totalTimeLabel && snippetDuration === 0) {
+            totalTimeLabel.innerText = formatTime(track.duration_seconds);
+          }
+          document.getElementById("current-badge-text").innerText = "16-bit / 48 kHz AAC (Full Audio Stream)";
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Could not auto-resolve full track stream:", err);
+  }
+}
+
+
 // Audio Player & Format Honesty
 let currentTrack = CATALOG_TRACKS[0];
 
@@ -806,7 +842,7 @@ function loadCurrentTrack(track) {
   document.getElementById("lyrics-content").innerText = track.lyrics || "— Instrumental Piece —";
 
   const isYouTube = track.id.startsWith("yt_");
-  const isItunes = track.id.startsWith("itunes_");
+  const isItunes = track.id.startsWith("itunes_") || (track.stream_url && track.stream_url.includes("apple.com"));
 
   // Technical Honesty Badge (FR-004)
   let badgeText = `${track.bit_depth}-bit / ${track.sample_rate / 1000} kHz ${track.audio_format.toUpperCase()}`;
@@ -818,8 +854,8 @@ function loadCurrentTrack(track) {
     badgeText = "16-bit / 48 kHz AAC (YouTube Direct)";
     statusText = "Live YouTube Stream";
   } else if (isItunes) {
-    badgeText = "16-bit / 44.1 kHz AAC (Direct Audio)";
-    statusText = "Instant Master Stream";
+    badgeText = "16-bit / 44.1 kHz AAC (Full Audio Stream)";
+    statusText = "Full Song Stream";
   }
 
   document.getElementById("current-badge-text").innerText = badgeText;
@@ -841,6 +877,19 @@ function loadCurrentTrack(track) {
       const videoId = track.id.replace("yt_", "");
       document.getElementById("current-badge-text").innerText = "Connecting YouTube Stream...";
       audio.src = `${API_BASE}/youtube/audio/${videoId}`;
+    } else if (isItunes) {
+      // Check if already resolved to full YouTube audio
+      if (track.full_stream_url) {
+        audio.src = track.full_stream_url;
+      } else {
+        // Start playing immediately and resolve full track in background
+        if (track.stream_url && track.stream_url.startsWith("http")) {
+          audio.src = track.stream_url;
+        } else {
+          audio.src = `${API_BASE}/catalog/audio/${track.id}`;
+        }
+        resolveFullTrackForItunes(track);
+      }
     } else if (track.stream_url && track.stream_url.startsWith("http")) {
       audio.src = track.stream_url;
     } else {

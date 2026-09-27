@@ -28,6 +28,7 @@ _CACHE_TTL_SECONDS = 3600  # 1 hour
 
 # Global track metadata registry for instant lookup across catalog/itunes/youtube
 _GLOBAL_TRACK_REGISTRY: Dict[str, Track] = {}
+_ITUNES_PREVIEWS: Dict[str, str] = {}
 
 
 def sanitize_filename(name: str) -> str:
@@ -43,6 +44,14 @@ class YouTubeService:
     @classmethod
     def get_registered_track(cls, track_id: str) -> Optional[Track]:
         return _GLOBAL_TRACK_REGISTRY.get(track_id)
+
+    @classmethod
+    def register_itunes_preview(cls, track_id: str, preview_url: str):
+        _ITUNES_PREVIEWS[track_id] = preview_url
+
+    @classmethod
+    def get_itunes_preview(cls, track_id: str) -> Optional[str]:
+        return _ITUNES_PREVIEWS.get(track_id)
 
     @staticmethod
     def browser_wav(file_path: str) -> bytes:
@@ -216,6 +225,8 @@ class YouTubeService:
                         artwork = item.get("artworkUrl100", "").replace("100x100bb.jpg", "600x600bb.jpg")
                         preview = item.get("previewUrl", "")
                         track_id = f"itunes_{item.get('trackId', idx)}"
+                        if preview:
+                            cls.register_itunes_preview(track_id, preview)
                         track = Track(
                             id=track_id,
                             album_id=f"alb_{item.get('collectionId', 'music')}",
@@ -233,7 +244,7 @@ class YouTubeService:
                             valence=0.65,
                             acousticness=0.25,
                             popularity=90,
-                            stream_url=preview,
+                            stream_url=f"/api/v1/catalog/audio/{track_id}",
                             cover_art_url=artwork or "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&auto=format&fit=crop&q=80",
                             audio_format=AudioFormat.AAC_256,
                             sample_rate=44100,

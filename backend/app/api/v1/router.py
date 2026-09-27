@@ -17,7 +17,8 @@ from sqlalchemy.orm import Session
 
 from ...models.entities import (
     Track, Artist, Album, Recommendation, ShuffleMode,
-    LocalFile, Subscription, ListeningEvent, ArtistSupport, UserTier, AudioFormat
+    LocalFile, Subscription, ListeningEvent, ArtistSupport, UserTier, AudioFormat,
+    ListeningRoom, RoomParticipant, QueueItem, RoomPermission
 )
 from ...services.catalog_service import CatalogService, GENRES
 from ...services.recommendation_service import RecommendationService
@@ -25,6 +26,7 @@ from ...services.shuffle_service import ShuffleService
 from ...services.reconciliation_service import ReconciliationService
 from ...services.royalty_calculator import UserCentricRoyaltyCalculator
 from ...services.youtube_service import YouTubeService
+from ...services.room_service import RoomService
 from ...db.session import get_db
 from ...db.models import (
     TrackModel, ArtistModel, AlbumModel, GenreModel,
@@ -534,4 +536,147 @@ async def download_catalog_track(track_id: str):
         )
 
     raise HTTPException(status_code=502, detail="Unable to stream download for this track")
+
+
+# -------------------------------------------------------------------------
+# Social Listening Rooms & Collaborative Queue Endpoints (SRS FR-021, FR-022)
+# -------------------------------------------------------------------------
+
+class CreateRoomRequest(BaseModel):
+    title: str
+    host_user_id: str = "usr_listener_01"
+    permission_mode: RoomPermission = RoomPermission.EVERYONE
+    initial_track_id: Optional[str] = None
+
+
+class JoinRoomRequest(BaseModel):
+    user_id: str = "usr_listener_01"
+    role: str = "listener"
+
+
+class AddQueueItemRequest(BaseModel):
+    user_id: str = "usr_listener_01"
+    track_id: str
+
+
+class VoteQueueItemRequest(BaseModel):
+    queue_item_id: str
+    delta: int = 1
+
+
+class PlaybackStateRequest(BaseModel):
+    host_user_id: str = "usr_listener_01"
+    track_id: Optional[str] = None
+    playback_position_ms: Optional[int] = None
+    is_playing: Optional[bool] = None
+
+
+@api_router.post("/rooms", response_model=ListeningRoom)
+def create_room(req: CreateRoomRequest):
+    """
+    Create a new collaborative social listening room (SRS FR-021, FR-022).
+    """
+    return RoomService.create_room(
+        title=req.title,
+        host_user_id=req.host_user_id,
+        permission_mode=req.permission_mode,
+        initial_track_id=req.initial_track_id
+    )
+
+
+@api_router.get("/rooms", response_model=List[ListeningRoom])
+def list_rooms():
+    """
+    List all active social listening rooms.
+    """
+    return RoomService.list_rooms()
+
+
+@api_router.get("/rooms/{room_id}")
+def get_room_details(room_id: str):
+    """
+    Get listening room details, active participants, and current collaborative queue.
+    """
+    room = RoomService.get_room(room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    participants = RoomService.get_participants(room_id)
+    queue = RoomService.get_queue(room_id)
+    return {
+        "room": room,
+        "participants": participants,
+        "queue": queue
+    }
+
+
+@api_router.post("/rooms/{room_id}/join", response_model=RoomParticipant)
+def join_room(room_id: str, req: JoinRoomRequest):
+    """
+    Join an active listening room.
+    """
+    try:
+        return RoomService.join_room(room_id=room_id, user_id=req.user_id, role=req.role)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@api_router.post("/rooms/{room_id}/leave")
+def leave_room(room_id: str, user_id: str = Query(...)):
+    """
+    Leave an active listening room.
+    """
+    success = RoomService.leave_room(room_id=room_id, user_id=user_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Room not found")
+    return {"status": "left", "room_id": room_id, "user_id": user_id}
+
+
+@api_router.post("/rooms/{room_id}/queue", response_model=QueueItem)
+def add_to_room_queue(room_id: str, req: AddQueueItemRequest):
+    """
+    Add a track to the collaborative queue.
+    """
+    track = CatalogService.get_track_by_id(req.track_id)
+    if not track:
+        raise HTTPException(status_code=404, detail=f"Track {req.track_id} not found")
+    try:
+        return RoomService.add_to_queue(room_id=room_id, user_id=req.user_id, track=track)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+
+
+@api_router.post("/rooms/{room_id}/vote")
+def vote_room_queue_item(room_id: str, req: VoteQueueItemRequest):
+    """
+    Upvote or downvote a queued track to dynamically alter queue ranking.
+    """
+    updated_item = RoomService.vote_queue_item(
+        room_id=room_id,
+        queue_item_id=req.queue_item_id,
+        delta=req.delta
+    )
+    if not updated_item:
+        raise HTTPException(status_code=404, detail="Queue item or room not found")
+    return updated_item
+
+
+@api_router.post("/rooms/{room_id}/playback", response_model=ListeningRoom)
+def update_room_playback(room_id: str, req: PlaybackStateRequest):
+    """
+    Update host playback synchronization state.
+    """
+    try:
+        return RoomService.update_playback_state(
+            room_id=room_id,
+            host_user_id=req.host_user_id,
+            track_id=req.track_id,
+            playback_position_ms=req.playback_position_ms,
+            is_playing=req.is_playing
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
 

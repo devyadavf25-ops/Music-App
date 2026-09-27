@@ -149,7 +149,7 @@ function serveStaticFile(req, res) {
         "Content-Type": contentType,
         "Accept-Ranges": "bytes",
         "Access-Control-Allow-Origin": "*",
-        "Cache-Control": ext === ".html" ? "no-cache" : "public, max-age=3600"
+        "Cache-Control": "no-cache, no-store, must-revalidate"
       });
       fs.createReadStream(filePath).pipe(res);
     }

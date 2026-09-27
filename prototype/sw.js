@@ -3,7 +3,7 @@
  * Enables 100% offline standalone usage on iOS and Android Home Screens.
  */
 
-const CACHE_NAME = "aura-music-v1.2";
+const CACHE_NAME = "aura-music-v2.0";
 
 const PRECACHE_ASSETS = [
   "./",
@@ -41,7 +41,7 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-// Fetch: Stale-While-Revalidate for app shell, cache fallback for offline
+// Fetch: Network-First for app shell, cache fallback for offline
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   const url = new URL(req.url);
@@ -69,22 +69,10 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // For App Shell assets: Cache First, fallback to Network
+  // For App Shell assets: Network First, falling back to Cache when offline
   event.respondWith(
-    caches.match(req).then((cachedResponse) => {
-      if (cachedResponse) {
-        // Fetch in background to revalidate cache if online
-        fetch(req).then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            caches.open(CACHE_NAME).then((cache) => cache.put(req, networkResponse));
-          }
-        }).catch(() => {});
-        return cachedResponse;
-      }
-
-      // If not in cache, fetch from network
-      return fetch(req).then((networkResponse) => {
-        // Cache static resources
+    fetch(req)
+      .then((networkResponse) => {
         if (
           networkResponse &&
           networkResponse.status === 200 &&
@@ -99,12 +87,14 @@ self.addEventListener("fetch", (event) => {
           caches.open(CACHE_NAME).then((cache) => cache.put(req, clone));
         }
         return networkResponse;
-      }).catch(() => {
-        // Offline fallback for navigation requests
-        if (req.mode === "navigate") {
-          return caches.match("./index.html");
-        }
-      });
-    })
+      })
+      .catch(() => {
+        return caches.match(req).then((cachedResponse) => {
+          if (cachedResponse) return cachedResponse;
+          if (req.mode === "navigate") {
+            return caches.match("./index.html");
+          }
+        });
+      })
   );
 });

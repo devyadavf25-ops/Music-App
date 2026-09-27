@@ -693,8 +693,9 @@ function renderTracks() {
 // 4-Mode Shuffle (SRS FR-008)
 function selectShuffleMode(mode) {
   currentShuffleMode = mode;
-  document.querySelectorAll(".shuffle-card").forEach(el => el.classList.remove("active"));
-  document.getElementById(`shuffle-${mode}`).classList.add("active");
+  document.querySelectorAll(".shuffle-card, .shuffle-pill").forEach(el => el.classList.remove("active"));
+  const activeEl = document.getElementById(`shuffle-${mode}`);
+  if (activeEl) activeEl.classList.add("active");
 
   if (mode === "standard") {
     // Fisher-Yates with artist separation
@@ -718,6 +719,79 @@ function cycleShuffleMode() {
   const nextIdx = (modes.indexOf(currentShuffleMode) + 1) % modes.length;
   selectShuffleMode(modes[nextIdx]);
 }
+
+// ========================================================
+// Mobile Snippet / Preview Engine (15s / 30s / Full)
+// On mobile devices, don't play full song — only play 30s or 15s
+// ========================================================
+function isMobileDevice() {
+  const ua = (navigator.userAgent || navigator.vendor || window.opera || "").toLowerCase();
+  return /android|iphone|ipad|ipod|blackberry|iemobile|opera mini|mobile/i.test(ua) || window.innerWidth <= 768;
+}
+
+// Default to 30s on mobile devices, or 0 (full length) on desktop
+let snippetDuration = (() => {
+  try {
+    const saved = localStorage.getItem("aura_snippet_duration");
+    if (saved !== null) {
+      const val = parseInt(saved, 10);
+      if (isMobileDevice() && (val <= 0 || isNaN(val))) return 30; // Mobile devices strictly play 15s or 30s snippets
+      return val;
+    }
+  } catch (_) {}
+  return isMobileDevice() ? 30 : 0;
+})();
+
+function setSnippetDuration(sec) {
+  let secNum = parseInt(sec, 10);
+  if (isMobileDevice() && secNum <= 0) {
+    secNum = 30; // Enforce preview snippet mode on mobile
+    showToast("Mobile Preview", "On mobile devices, playback is limited to 15s or 30s clips.", "📱");
+  }
+  snippetDuration = secNum;
+  try {
+    localStorage.setItem("aura_snippet_duration", snippetDuration);
+  } catch (_) {}
+
+  updateSnippetDisplay();
+
+  if (snippetDuration > 0) {
+    showToast("Mobile Clip Mode", `Playing ${snippetDuration}s snippet previews with auto-advance.`, "⚡");
+    if (audio.currentTime >= snippetDuration && isPlaying) {
+      nextTrack();
+    }
+  } else {
+    showToast("Full Playback", "Playing full length tracks.", "🎧");
+  }
+}
+
+function updateSnippetDisplay() {
+  document.querySelectorAll(".snippet-pill-btn").forEach(btn => {
+    const d = parseInt(btn.getAttribute("data-duration"), 10);
+    btn.classList.toggle("active", d === snippetDuration);
+  });
+
+  const badge = document.getElementById("snippet-badge");
+  const totalTime = document.getElementById("total-time-label");
+
+  if (snippetDuration > 0) {
+    if (badge) {
+      badge.style.display = "inline-flex";
+      badge.innerText = `📱 ${snippetDuration}s Clip`;
+    }
+    if (totalTime) {
+      totalTime.innerText = `${formatTime(snippetDuration)} (Clip)`;
+    }
+  } else {
+    if (badge) {
+      badge.style.display = "none";
+    }
+    if (totalTime && currentTrack) {
+      totalTime.innerText = formatTime(Math.floor(audio.duration || currentTrack.duration_seconds || 240));
+    }
+  }
+}
+
 
 // Audio Player & Format Honesty
 let currentTrack = CATALOG_TRACKS[0];
@@ -755,7 +829,12 @@ function loadCurrentTrack(track) {
     <div><span>Status</span><strong class="text-emerald">${statusText}</strong></div>
   `;
 
-  document.getElementById("total-time-label").innerText = formatTime(track.duration_seconds);
+  if (snippetDuration > 0) {
+    document.getElementById("total-time-label").innerText = `${formatTime(snippetDuration)} (Clip)`;
+  } else {
+    document.getElementById("total-time-label").innerText = formatTime(track.duration_seconds);
+  }
+  updateSnippetDisplay();
 
   if (!track.offlineUrl) {
     if (isYouTube) {
@@ -773,6 +852,7 @@ function loadCurrentTrack(track) {
 }
 
 function selectTrack(index) {
+  isAutoAdvancing = false;
   currentTrackIndex = index;
   loadCurrentTrack(activeTracks[index]);
   playAudio();
@@ -808,21 +888,45 @@ function pauseAudio() {
 }
 
 function nextTrack() {
+  isAutoAdvancing = false;
   currentTrackIndex = (currentTrackIndex + 1) % activeTracks.length;
   selectTrack(currentTrackIndex);
 }
 
 function prevTrack() {
+  isAutoAdvancing = false;
   currentTrackIndex = (currentTrackIndex - 1 + activeTracks.length) % activeTracks.length;
   selectTrack(currentTrackIndex);
 }
 
 // Scrubber & Time
+let isAutoAdvancing = false;
+
 audio.addEventListener("timeupdate", () => {
-  if (!audio.duration) return;
-  const progress = (audio.currentTime / audio.duration) * 100;
-  document.getElementById("progress-fill").style.width = `${progress}%`;
+  const effectiveDuration = (snippetDuration > 0) ? snippetDuration : (audio.duration || currentTrack.duration_seconds || 1);
+
+  // Mobile / Snippet Mode limit (play only 15s or 30s)
+  if (snippetDuration > 0 && audio.currentTime >= snippetDuration) {
+    if (isAutoAdvancing) return;
+    isAutoAdvancing = true;
+    audio.pause();
+    showToast("Mobile Clip Finished", `${snippetDuration}s preview completed. Moving to next track...`, "⏭️");
+    setTimeout(() => {
+      isAutoAdvancing = false;
+      nextTrack();
+    }, 450);
+    return;
+  }
+
+  const progress = (audio.currentTime / effectiveDuration) * 100;
+  document.getElementById("progress-fill").style.width = `${Math.min(100, Math.max(0, progress))}%`;
   document.getElementById("current-time-label").innerText = formatTime(Math.floor(audio.currentTime));
+});
+
+audio.addEventListener("loadedmetadata", () => {
+  if (snippetDuration === 0 && audio.duration) {
+    document.getElementById("total-time-label").innerText = formatTime(Math.floor(audio.duration));
+  }
 });
 
 audio.addEventListener("ended", () => {
@@ -833,8 +937,9 @@ function handleSeek(e) {
   const rect = document.getElementById("progress-track").getBoundingClientRect();
   const clickX = e.clientX - rect.left;
   const fraction = Math.max(0, Math.min(1, clickX / rect.width));
-  if (audio.duration) {
-    audio.currentTime = fraction * audio.duration;
+  const effectiveDuration = (snippetDuration > 0) ? snippetDuration : (audio.duration || currentTrack.duration_seconds || 0);
+  if (effectiveDuration > 0) {
+    audio.currentTime = fraction * effectiveDuration;
   }
 }
 
@@ -1572,13 +1677,14 @@ function updateMediaSession(track) {
   try {
     navigator.mediaSession.setActionHandler("play", () => playAudio());
     navigator.mediaSession.setActionHandler("pause", () => pauseAudio());
-    navigator.mediaSession.setActionHandler("previoustrack", () => previousTrack());
+    navigator.mediaSession.setActionHandler("previoustrack", () => prevTrack());
     navigator.mediaSession.setActionHandler("nexttrack", () => nextTrack());
     navigator.mediaSession.setActionHandler("seekbackward", () => {
       audio.currentTime = Math.max(audio.currentTime - 10, 0);
     });
     navigator.mediaSession.setActionHandler("seekforward", () => {
-      audio.currentTime = Math.min(audio.currentTime + 10, audio.duration || 0);
+      const limit = (snippetDuration > 0) ? snippetDuration : (audio.duration || 0);
+      audio.currentTime = Math.min(audio.currentTime + 10, limit);
     });
   } catch (e) {
     console.debug("MediaSession actions error:", e);
@@ -1657,6 +1763,19 @@ document.addEventListener("DOMContentLoaded", () => {
     console.log("[Aura] Offline launch detected. Switching to offline vault.");
     toggleOfflineMode(true);
   }
+
+  // Initialize snippet display
+  updateSnippetDisplay();
+});
+
+window.addEventListener("resize", () => {
+  // If user hasn't explicitly set preference, adapt default for mobile
+  try {
+    if (localStorage.getItem("aura_snippet_duration") === null) {
+      snippetDuration = isMobileDevice() ? 30 : 0;
+      updateSnippetDisplay();
+    }
+  } catch (_) {}
 });
 
 // Real-time network transitions

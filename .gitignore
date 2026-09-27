@@ -42,6 +42,7 @@ Thumbs.db
 
 # Environment variables
 .env
+backend/.env
 .env.local
 
 # Databases

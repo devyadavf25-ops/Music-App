@@ -46,6 +46,7 @@ def init_db(db: Session = None) -> None:
                 color_hex=g.color_hex
             )
             db.merge(genre_row)
+        db.commit()
 
         # 3. Seed Artists
         for a in ARTISTS:
@@ -59,6 +60,7 @@ def init_db(db: Session = None) -> None:
                 verified=a.verified
             )
             db.merge(artist_row)
+        db.commit()
 
         # 4. Seed Albums
         for alb in ALBUMS:
@@ -75,6 +77,7 @@ def init_db(db: Session = None) -> None:
                 max_sample_rate=alb.max_sample_rate
             )
             db.merge(album_row)
+        db.commit()
 
         # 5. Seed Tracks
         for t in TRACKS:
@@ -102,6 +105,7 @@ def init_db(db: Session = None) -> None:
                 lyrics=t.lyrics
             )
             db.merge(track_row)
+        db.commit()
 
         # 6. Seed Demo User
         demo_user = UserModel(
@@ -122,6 +126,7 @@ def init_db(db: Session = None) -> None:
             is_public=True
         )
         db.merge(demo_playlist)
+        db.commit()
 
         # Add first two tracks to demo playlist
         db.merge(PlaylistTrackModel(
@@ -136,7 +141,6 @@ def init_db(db: Session = None) -> None:
             track_id="trk_004",
             position=1
         ))
-
         db.commit()
         logger.info("Database seeding completed successfully.")
 

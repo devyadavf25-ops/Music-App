@@ -5,11 +5,25 @@ Supports PostgreSQL (Render / Supabase / Neon) and SQLite (local dev & testing).
 
 import os
 import logging
+from pathlib import Path
 from typing import Generator
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
 logger = logging.getLogger(__name__)
+
+# Auto-load backend/.env if present (zero-dependency, no python-dotenv needed)
+_env_file = Path(__file__).resolve().parent.parent.parent / ".env"
+if _env_file.exists():
+    for line in _env_file.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" in line:
+            key, _, value = line.partition("=")
+            key, value = key.strip(), value.strip()
+            if key and key not in os.environ:
+                os.environ[key] = value
 
 # Base class for declarative SQLAlchemy models
 class Base(DeclarativeBase):

@@ -258,6 +258,10 @@ function switchTab(tab) {
   } else if (tab === "reconciliation") {
     document.getElementById("tab-reconciliation").classList.add("active");
     document.getElementById("view-reconciliation").classList.add("active");
+  } else if (tab === "offline") {
+    document.getElementById("tab-offline").classList.add("active");
+    document.getElementById("view-offline").classList.add("active");
+    renderOfflineVault();
   } else if (tab === "royalties") {
     document.getElementById("tab-royalties").classList.add("active");
     document.getElementById("view-royalties").classList.add("active");
@@ -1165,3 +1169,281 @@ async function fetchLiveRecommendations() {
   showToast("Feed Re-ranked", "Used local scoring engine (backend unavailable)", "⚡");
 }
 
+// ================================================================
+// OFFLINE VAULT — Full Offline Music Experience
+// ================================================================
+
+let isOfflineMode = false;
+
+function toggleOfflineMode(enabled) {
+  isOfflineMode = enabled;
+  const toggle = document.getElementById("offline-mode-toggle");
+  const box = document.getElementById("offline-toggle-box");
+  const label = document.getElementById("offline-mode-status-text");
+  const banner = document.getElementById("offline-active-banner");
+  const networkStat = document.getElementById("offline-stat-network");
+  const networkSub = document.getElementById("offline-stat-network-sub");
+
+  if (toggle) toggle.checked = enabled;
+  if (box) box.classList.toggle("active-mode", enabled);
+  if (label) label.innerText = enabled ? "Offline" : "Online";
+  if (banner) banner.style.display = enabled ? "flex" : "none";
+  if (networkStat) {
+    networkStat.innerText = enabled ? "Airplane Mode" : "Connected";
+    networkStat.className = "stat-value " + (enabled ? "text-purple" : "text-emerald");
+  }
+  if (networkSub) networkSub.innerText = enabled ? "Zero network — local playback only" : "Auto-sync enabled";
+
+  if (enabled) {
+    showToast("Offline Mode", "All playback will use downloaded audio (zero network).", "✈️");
+    // Switch to offline vault view and show only offline tracks in the queue
+    switchTab("offline");
+    activeTracks = offlineDownloads.map(item => {
+      const offlineURL = item.blob ? URL.createObjectURL(item.blob) : null;
+      return {
+        id: item.id,
+        title: item.title,
+        artist_name: item.artist_name,
+        album_title: "Offline Vault",
+        duration_seconds: 240,
+        cover_art_url: item.cover_art_url || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80",
+        stream_url: offlineURL || "",
+        offlineUrl: offlineURL,
+        audio_format: item.format || "audio/mp4",
+        sample_rate: 48000,
+        bit_depth: 16,
+        bpm: 120,
+        musical_key: "C Major",
+        energy: 0.7,
+        valence: 0.6,
+        acousticness: 0.3,
+        popularity: 100,
+        lyrics: "Cached offline file — zero network playback."
+      };
+    });
+    renderTracks();
+  } else {
+    showToast("Online Mode", "Network streaming re-enabled.", "🌐");
+    activeTracks = [...CATALOG_TRACKS];
+    reRankRecommendations();
+  }
+}
+
+function renderOfflineVault() {
+  const tbody = document.getElementById("offline-vault-table-body");
+  const emptyState = document.getElementById("offline-empty-state");
+  const badge = document.getElementById("sidebar-offline-count");
+  const statCount = document.getElementById("offline-stat-count");
+  const statSize = document.getElementById("offline-stat-size");
+
+  if (badge) badge.innerText = offlineDownloads.length;
+  if (statCount) statCount.innerText = `${offlineDownloads.length} Song${offlineDownloads.length !== 1 ? "s" : ""}`;
+
+  const totalMb = offlineDownloads.reduce((acc, item) => acc + parseFloat(item.size_mb || "0"), 0);
+  if (statSize) statSize.innerText = `${totalMb.toFixed(1)} MB`;
+
+  if (!tbody) return;
+
+  if (offlineDownloads.length === 0) {
+    tbody.innerHTML = "";
+    if (emptyState) emptyState.style.display = "block";
+    return;
+  }
+
+  if (emptyState) emptyState.style.display = "none";
+  tbody.innerHTML = "";
+
+  offlineDownloads.forEach((item, idx) => {
+    const tr = document.createElement("tr");
+    const coverUrl = item.cover_art_url || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200&auto=format&fit=crop&q=80";
+    tr.innerHTML = `
+      <td>
+        <div class="offline-table-track">
+          <img src="${coverUrl}" alt="${item.title}" class="offline-track-thumb" onerror="this.src='https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200&auto=format&fit=crop&q=80'">
+          <div>
+            <strong>${item.title}</strong><br>
+            <small style="color: var(--text-dim);">${item.artist_name}</small>
+          </div>
+        </div>
+      </td>
+      <td><span class="offline-pill-tag">✓ ${item.format || "audio/mp4"}</span></td>
+      <td><code style="font-size: 12px;">${item.size_mb}</code></td>
+      <td><small style="color: var(--emerald);">✓ IndexedDB Vault</small></td>
+      <td>
+        <div class="offline-row-actions" style="justify-content: flex-end;">
+          <button class="btn-play-offline-now" onclick="playDownloadedTrack(${idx})" title="Play from offline storage">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            Play
+          </button>
+          <button class="btn-export-file" onclick="exportOfflineFile(${idx})" title="Save audio file to computer">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            Export
+          </button>
+          <button class="btn-delete-offline" onclick="deleteOfflineTrack(${idx})" title="Remove from offline vault">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+          </button>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function exportOfflineFile(idx) {
+  const item = offlineDownloads[idx];
+  if (!item || !item.blob) {
+    showToast("Export Failed", "Audio blob not found in storage.", "⚠️");
+    return;
+  }
+  const url = URL.createObjectURL(item.blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const ext = (item.format || "audio/mp4").includes("wav") ? ".wav" : (item.format || "").includes("webm") ? ".webm" : ".m4a";
+  a.download = `${item.title} - ${item.artist_name}${ext}`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast("File Exported", `"${item.title}" saved to your Downloads folder.`, "📁");
+}
+
+async function deleteOfflineTrack(idx) {
+  const item = offlineDownloads[idx];
+  if (!item) return;
+
+  if (!confirm(`Delete "${item.title}" from offline vault?`)) return;
+
+  try {
+    const database = await openOfflineDatabase();
+    await new Promise((resolve, reject) => {
+      const tx = database.transaction(OFFLINE_STORE_NAME, "readwrite");
+      tx.objectStore(OFFLINE_STORE_NAME).delete(item.id);
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+    database.close();
+  } catch (e) {
+    console.warn("Error deleting from IndexedDB:", e);
+  }
+
+  offlineDownloads.splice(idx, 1);
+  delete downloadStates[item.id];
+  renderOfflineVault();
+  renderOfflineDownloads();
+  renderTracks();
+  updateCurrentDownloadButton();
+  showToast("Track Removed", `"${item.title}" deleted from offline vault.`, "🗑️");
+}
+
+async function clearAllOfflineDownloads() {
+  if (offlineDownloads.length === 0) {
+    showToast("Vault Empty", "There are no offline downloads to clear.", "ℹ️");
+    return;
+  }
+  if (!confirm(`Delete ALL ${offlineDownloads.length} offline tracks? This cannot be undone.`)) return;
+
+  try {
+    const database = await openOfflineDatabase();
+    await new Promise((resolve, reject) => {
+      const tx = database.transaction(OFFLINE_STORE_NAME, "readwrite");
+      tx.objectStore(OFFLINE_STORE_NAME).clear();
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+    database.close();
+  } catch (e) {
+    console.warn("Error clearing IndexedDB:", e);
+  }
+
+  offlineDownloads = [];
+  Object.keys(downloadStates).forEach(k => delete downloadStates[k]);
+  renderOfflineVault();
+  renderOfflineDownloads();
+  renderTracks();
+  updateCurrentDownloadButton();
+  showToast("Vault Cleared", "All offline downloads have been deleted.", "🗑️");
+}
+
+function filterOfflineList(query) {
+  const tbody = document.getElementById("offline-vault-table-body");
+  if (!tbody) return;
+  const q = (query || "").toLowerCase().trim();
+  const rows = tbody.querySelectorAll("tr");
+  rows.forEach((row, idx) => {
+    const item = offlineDownloads[idx];
+    if (!item) return;
+    const match = !q || item.title.toLowerCase().includes(q) || item.artist_name.toLowerCase().includes(q);
+    row.style.display = match ? "" : "none";
+  });
+}
+
+async function downloadRecommendedBatch() {
+  const tracksToDownload = activeTracks.filter(t => !offlineDownloads.some(d => d.id === t.id)).slice(0, 3);
+  if (tracksToDownload.length === 0) {
+    showToast("All Downloaded", "All current tracks are already in your offline vault!", "✅");
+    return;
+  }
+  showToast("Batch Download", `Downloading ${tracksToDownload.length} tracks for offline listening...`, "📥");
+  for (const track of tracksToDownload) {
+    await downloadTrack(track.id);
+  }
+  renderOfflineVault();
+  showToast("Batch Complete", `${tracksToDownload.length} tracks saved to offline vault!`, "✅");
+}
+
+function handleLocalFilesImport(event) {
+  const files = event.target.files;
+  if (!files || files.length === 0) return;
+
+  Array.from(files).forEach(async (file) => {
+    if (!file.type.startsWith("audio/")) return;
+
+    const blob = file;
+    const name = file.name.replace(/\.[^/.]+$/, ""); // Strip extension
+    let title = name;
+    let artist = "Local Import";
+
+    // Try to parse "Artist - Title" format from filename
+    if (name.includes(" - ")) {
+      const parts = name.split(" - ", 2);
+      artist = parts[0].trim();
+      title = parts[1].trim();
+    }
+
+    const id = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const item = {
+      id,
+      title,
+      artist_name: artist,
+      format: file.type || "audio/mpeg",
+      size_mb: `${(blob.size / (1024 * 1024)).toFixed(1)} MB`,
+      location: "Browser IndexedDB",
+      date: new Date().toISOString().split("T")[0],
+      cover_art_url: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&auto=format&fit=crop&q=80",
+      blob
+    };
+
+    await saveOfflineDownload(item);
+    offlineDownloads = [item, ...offlineDownloads.filter(d => d.id !== item.id)];
+    renderOfflineVault();
+    renderOfflineDownloads();
+    showToast("Music Imported", `"${title}" by ${artist} added to your offline vault.`, "🎵");
+  });
+
+  // Reset file input so the same file can be selected again
+  event.target.value = "";
+}
+
+// Update sidebar badge count on load
+function updateOfflineBadge() {
+  const badge = document.getElementById("sidebar-offline-count");
+  if (badge) badge.innerText = offlineDownloads.length;
+}
+
+// Patch the existing loadOfflineDownloads to also update vault
+const _originalLoadOffline = loadOfflineDownloads;
+loadOfflineDownloads = async function() {
+  await _originalLoadOffline();
+  updateOfflineBadge();
+  renderOfflineVault();
+};

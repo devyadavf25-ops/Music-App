@@ -11,6 +11,7 @@ import SwiftUI
 
 public struct HomeFeedView: View {
     @ObservedObject var player: AudioPlayerService
+    @ObservedObject private var downloadManager = DownloadManager.shared
     @State private var varianceSetting: Double = 0.50
     @State private var recommendations: [RecommendationItem] = []
     
@@ -245,6 +246,28 @@ public struct HomeFeedView: View {
                                 }
                                 
                                 Spacer()
+                                
+                                // Download for Offline Listening
+                                Button(action: {
+                                    Task {
+                                        try? await downloadManager.downloadYouTubeTrack(rec.track)
+                                    }
+                                }) {
+                                    if downloadManager.isDownloaded(trackId: rec.track.id) {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .font(.system(size: 22))
+                                            .foregroundColor(.green)
+                                    } else if downloadManager.isDownloading(trackId: rec.track.id) {
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: .purple))
+                                            .scaleEffect(0.8)
+                                    } else {
+                                        Image(systemName: "arrow.down.circle")
+                                            .font(.system(size: 22))
+                                            .foregroundColor(.gray)
+                                    }
+                                }
+                                .padding(.trailing, 4)
                                 
                                 // Play action
                                 Button(action: {

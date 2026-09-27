@@ -47,5 +47,6 @@ Thumbs.db
 # Databases
 *.db
 *.sqlite
-*.sqlite3
-
+# Node
+node_modules/
+npm-debug.log

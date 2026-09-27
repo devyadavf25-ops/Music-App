@@ -42,6 +42,11 @@
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
           <span>Hybrid Library</span>
         </button>
+        <button class="nav-item" id="tab-offline" onclick="switchTab('offline')">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          <span>Offline Vault</span>
+          <span class="nav-badge" id="sidebar-offline-count">0</span>
+        </button>
         <button class="nav-item" id="tab-royalties" onclick="switchTab('royalties')">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
           <span>User-Centric Royalties</span>
@@ -82,6 +87,23 @@
           </div>
         </div>
         <div class="topbar-right" style="display: flex; align-items: center; gap: 10px;">
+          <!-- Offline Mode Toggle Switch -->
+          <div class="offline-toggle-container" id="offline-toggle-box" title="Toggle 100% Offline Mode (Airplane / No Internet)">
+            <span class="offline-pulse-dot" id="offline-dot"></span>
+            <span class="offline-status-text" id="offline-mode-status-text">Online</span>
+            <label class="switch">
+              <input type="checkbox" id="offline-mode-toggle" onchange="toggleOfflineMode(this.checked)">
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <!-- Import Audio File -->
+          <button class="import-top-btn" onclick="document.getElementById('file-picker-hidden').click()" title="Import local MP3, M4A, FLAC, or WAV songs to offline library">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            <span>Import Music</span>
+          </button>
+          <input type="file" id="file-picker-hidden" accept="audio/*" multiple style="display: none;" onchange="handleLocalFilesImport(event)">
+
           <button id="api-status-pill" class="api-status-btn" onclick="openApiSettings()" title="Click to view or update your Backend API URL">
             <span class="status-dot"></span>
             <span id="api-status-label">Cloud API</span>
@@ -93,6 +115,18 @@
           </div>
         </div>
       </header>
+
+      <!-- Airplane / Offline Mode Notification Banner -->
+      <div id="offline-active-banner" class="offline-banner" style="display: none;">
+        <div class="offline-banner-content">
+          <span class="offline-banner-icon">✈️</span>
+          <div>
+            <strong>Offline Vault Active</strong>
+            <p>Playing directly from your local IndexedDB storage. Zero internet data is used.</p>
+          </div>
+        </div>
+        <button class="btn-banner-action" onclick="toggleOfflineMode(false)">Turn Online</button>
+      </div>
 
       <!-- View: Home / For You -->
       <section id="view-home" class="view-panel active">
@@ -249,6 +283,105 @@
         </div>
       </section>
 
+      <!-- View: Offline Vault (100% Offline Music Listening & Library) -->
+      <section id="view-offline" class="view-panel">
+        <div class="feature-hero">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
+            <div>
+              <span class="section-tag">OFFLINE AUDIOPHILE VAULT</span>
+              <h1>Downloaded & Local Music</h1>
+              <p>Listen anywhere without internet connection. Every track here is stored directly inside your browser's persistent IndexedDB and playable 100% offline.</p>
+            </div>
+            <div class="offline-hero-actions">
+              <button class="btn-primary" onclick="downloadRecommendedBatch()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                <span>Save Recommendations</span>
+              </button>
+              <button class="btn-secondary" onclick="document.getElementById('file-picker-hidden').click()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                <span>Import Local Audio</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Offline Vault Stats Overview -->
+        <div class="royalty-summary-grid">
+          <div class="stat-card">
+            <span class="stat-label">Saved Offline Tracks</span>
+            <span class="stat-value text-emerald" id="offline-stat-count">0 Songs</span>
+            <span class="stat-sub">Ready for airplane mode</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Local Vault Storage</span>
+            <span class="stat-value text-purple" id="offline-stat-size">0.0 MB</span>
+            <span class="stat-sub">IndexedDB Binary Blob storage</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Playback State</span>
+            <span class="stat-value text-emerald" id="offline-stat-network">Connected</span>
+            <span class="stat-sub" id="offline-stat-network-sub">Auto-sync enabled</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Audio Fidelity</span>
+            <span class="stat-value">High Quality</span>
+            <span class="stat-sub">Uncut full audio streams</span>
+          </div>
+        </div>
+
+        <!-- Offline Track Manager Toolbar -->
+        <div class="offline-toolbar-card">
+          <div class="offline-filter-box">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <input type="text" id="offline-search-input" placeholder="Filter downloaded songs..." oninput="filterOfflineList(this.value)">
+          </div>
+          <div class="offline-toolbar-btns">
+            <button class="btn-icon-subtle" onclick="clearAllOfflineDownloads()" title="Delete all downloaded songs from device">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+              <span>Clear Vault</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Offline Tracks Table -->
+        <div class="breakdown-card">
+          <div class="table-container">
+            <table class="reconcile-table">
+              <thead>
+                <tr>
+                  <th>Song & Artist</th>
+                  <th>Format / Codec</th>
+                  <th>File Size</th>
+                  <th>Storage Location</th>
+                  <th style="text-align: right;">Offline Actions</th>
+                </tr>
+              </thead>
+              <tbody id="offline-vault-table-body">
+                <!-- Injected via JavaScript renderOfflineVault() -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Empty State -->
+          <div id="offline-empty-state" class="offline-empty-state" style="display: none;">
+            <div class="empty-icon-wrap">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            </div>
+            <h3>Your Offline Vault is Empty</h3>
+            <p>Download your favorite tracks or import local music files so you can listen anywhere without internet.</p>
+            <div style="display: flex; gap: 12px; justify-content: center; margin-top: 16px;">
+              <button class="btn-primary" onclick="downloadRecommendedBatch()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                Download Top Tracks
+              </button>
+              <button class="btn-secondary" onclick="document.getElementById('file-picker-hidden').click()">
+                Import Local Songs
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- View: User-Centric Royalties (SRS FR-020) -->
       <section id="view-royalties" class="view-panel">
         <div class="feature-hero">
@@ -298,6 +431,102 @@
                 <!-- Injected via JavaScript -->
               </tbody>
             </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- View: Dedicated Offline Vault (100% Offline Music Experience) -->
+      <section id="view-offline" class="view-panel">
+        <div id="offline-active-banner" class="offline-banner-active" style="display: none;">
+          <div class="banner-left">
+            <span class="offline-pulse-dot"></span>
+            <div>
+              <strong>100% Offline Mode Active</strong>
+              <div style="font-size: 11px; opacity: 0.9;">No network requests are being made. All audio is played from high-bitrate device storage.</div>
+            </div>
+          </div>
+          <button class="offline-btn offline-btn-secondary" onclick="toggleOfflineMode(false)" style="padding: 4px 12px; font-size: 11px;">
+            Exit Offline Mode
+          </button>
+        </div>
+
+        <div class="feature-hero">
+          <span class="section-tag" style="color: #34d399; border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.1);">ZERO DATA REQUIRED</span>
+          <h1>Offline Music Vault</h1>
+          <p>Download your favorite YouTube music, albums, and songs directly to your device storage. Play anytime with zero internet connection, airplane mode support, and 1-click file export to your phone or computer.</p>
+        </div>
+
+        <!-- Offline Statistics -->
+        <div class="offline-stats-grid">
+          <div class="stat-card">
+            <span class="stat-label">Saved Offline Tracks</span>
+            <span class="stat-value text-emerald" id="offline-stat-count">0 Songs</span>
+            <span class="stat-sub">Ready for airplane mode</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Local Storage Footprint</span>
+            <span class="stat-value text-purple" id="offline-stat-size">0.0 MB</span>
+            <span class="stat-sub">Browser IndexedDB Vault</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Playback Performance</span>
+            <span class="stat-value" id="offline-stat-quality">Zero Latency</span>
+            <span class="stat-sub">Direct blob streaming (0ms buffering)</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Network State</span>
+            <span class="stat-value text-emerald" id="offline-stat-network">Connected</span>
+            <span class="stat-sub" id="offline-stat-network-sub">Auto-sync enabled</span>
+          </div>
+        </div>
+
+        <!-- Offline Actions & Filter Bar -->
+        <div class="offline-actions-bar">
+          <div class="offline-search-box">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <input type="text" id="offline-filter-input" placeholder="Filter downloaded songs by title or artist..." oninput="filterOfflineList(this.value)">
+          </div>
+
+          <div class="offline-buttons-group">
+            <button class="offline-btn offline-btn-primary" onclick="downloadRecommendedBatch()" title="Download top recommended tracks for offline listening">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              <span>Download Recommended</span>
+            </button>
+            <button class="offline-btn offline-btn-secondary" onclick="document.getElementById('file-picker-hidden').click()" title="Import local MP3, M4A, FLAC audio files from your computer">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+              <span>Import Audio Files</span>
+            </button>
+            <button class="offline-btn offline-btn-danger" onclick="clearAllOfflineDownloads()" title="Delete all downloaded songs from storage">
+              <span>Clear Vault</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Offline Tracks Table -->
+        <div class="breakdown-card">
+          <div class="table-container">
+            <table class="reconcile-table">
+              <thead>
+                <tr>
+                  <th>Song & Artist</th>
+                  <th>Quality / Format</th>
+                  <th>File Size</th>
+                  <th>Storage Engine</th>
+                  <th style="text-align: right;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="offline-vault-table-body">
+                <!-- Dynamically rendered via JavaScript -->
+              </tbody>
+            </table>
+          </div>
+          <div id="offline-empty-state" style="display: none; padding: 40px 20px; text-align: center; color: var(--text-dim);">
+            <div style="font-size: 36px; margin-bottom: 12px;">📥</div>
+            <h4 style="color: var(--text-primary); margin-bottom: 6px;">Your Offline Vault is Empty</h4>
+            <p style="font-size: 13px; max-width: 420px; margin: 0 auto 16px auto;">Search any YouTube track or browse recommendations and click the Download button to listen anywhere offline with zero internet.</p>
+            <button class="offline-btn offline-btn-primary" onclick="downloadRecommendedBatch()">
+              Download Top 3 Tracks Now
+            </button>
           </div>
         </div>
       </section>

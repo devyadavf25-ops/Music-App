@@ -1,0 +1,24 @@
+{
+  "name": "aura-music-platform",
+  "version": "1.0.0",
+  "description": "Next-Generation AI-Driven Music Platform with High-Fidelity Audio, YouTube Integration, and Complete Offline Listening.",
+  "main": "dev-server.js",
+  "scripts": {
+    "dev": "node dev-server.js",
+    "start": "node dev-server.js",
+    "backend": "python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8001 --reload",
+    "test": "cd backend && python -m pytest tests/"
+  },
+  "keywords": [
+    "music",
+    "offline-music",
+    "youtube-music",
+    "audiophile",
+    "flac",
+    "alac",
+    "ios",
+    "fastapi"
+  ],
+  "author": "Dev Kumar Yadav",
+  "license": "MIT"
+}

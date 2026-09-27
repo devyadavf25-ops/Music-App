@@ -393,18 +393,15 @@ async def resolve_full_song(
     """
     query = f"{artist} {title}".strip()
     try:
-        results = await YouTubeService.search(query, limit=1)
-        if results and results[0].id.startswith("yt_"):
-            t = results[0]
-            vid = t.id.replace("yt_", "")
+        vid = await YouTubeService.resolve_video_id(query)
+        if vid:
             return {
                 "found": True,
                 "video_id": vid,
-                "title": t.title,
-                "artist_name": t.artist_name,
-                "duration_seconds": t.duration_seconds,
+                "title": title,
+                "artist_name": artist,
                 "stream_url": f"/api/v1/youtube/audio/{vid}",
-                "cover_art_url": t.cover_art_url
+                "cover_art_url": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg"
             }
     except Exception as e:
         logger.warning("Error resolving full song for '%s': %s", query, e)
@@ -497,33 +494,40 @@ async def download_youtube_file(video_id: str):
 
 
 @api_router.get("/catalog/audio/{track_id}")
-async def stream_catalog_audio(track_id: str):
+async def stream_catalog_audio(
+    track_id: str,
+    title: Optional[str] = Query(None),
+    artist: Optional[str] = Query(None)
+):
     """
     Provides a browser & mobile compatible audio stream with Range support for catalog,
-    iTunes, or YouTube items.
+    iTunes, or YouTube items. Automatically resolves full-length song for searched tracks.
     """
     import httpx
 
-    # If YouTube track passed to catalog endpoint
+    # 1. If YouTube track passed to catalog endpoint
     if track_id.startswith("yt_"):
         video_id = track_id.replace("yt_", "")
         return await stream_youtube_audio(video_id)
 
-    # Check registered iTunes / online tracks
-    if track_id.startswith("itunes_"):
+    # 2. Check iTunes / online tracks — resolve full song first!
+    if track_id.startswith("itunes_") or title:
+        search_term = ""
         reg_track = YouTubeService.get_registered_track(track_id)
         if reg_track:
-            # Attempt to resolve full YouTube song stream instead of 30-second preview
-            try:
-                query = f"{reg_track.artist_name} {reg_track.title}".strip()
-                yt_results = await YouTubeService.search(query, limit=1)
-                if yt_results and yt_results[0].id.startswith("yt_"):
-                    yt_vid = yt_results[0].id.replace("yt_", "")
-                    return await stream_youtube_audio(yt_vid)
-            except Exception as e:
-                logger.warning("Failed to auto-resolve YouTube stream for %s: %s", track_id, e)
+            search_term = f"{reg_track.artist_name} {reg_track.title}".strip()
+        elif title:
+            search_term = f"{artist or ''} {title}".strip()
 
-        # Fallback to preview URL if full song resolution fails
+        if search_term:
+            try:
+                vid = await YouTubeService.resolve_video_id(search_term)
+                if vid:
+                    return await stream_youtube_audio(vid)
+            except Exception as e:
+                logger.warning("Failed to auto-resolve YouTube stream for %s (%s): %s", track_id, search_term, e)
+
+        # Fallback to preview URL only if full song resolution fails
         preview_url = YouTubeService.get_itunes_preview(track_id)
         if preview_url:
             return RedirectResponse(url=preview_url, status_code=307)
@@ -532,22 +536,15 @@ async def stream_catalog_audio(track_id: str):
 
     reg_track = YouTubeService.get_registered_track(track_id)
     if reg_track and reg_track.stream_url:
-        if reg_track.stream_url.startswith("http"):
-            return RedirectResponse(url=reg_track.stream_url, status_code=307)
-        elif reg_track.stream_url.startswith("/"):
+        if reg_track.stream_url.startswith("http") or reg_track.stream_url.startswith("/"):
             return RedirectResponse(url=reg_track.stream_url, status_code=307)
 
     # Check standard local catalog
     track = CatalogService.get_track_by_id(track_id)
-    if not track:
-        # If iTunes track without prior registration, attempt direct fallback or 404
-        raise HTTPException(status_code=404, detail="Track not found in catalog")
-
-    if track.stream_url and track.stream_url.startswith("http"):
-        # Redirect directly to CDN stream with 307 so browser can stream with full native Range headers
+    if track and track.stream_url and track.stream_url.startswith("http"):
         return RedirectResponse(url=track.stream_url, status_code=307)
 
-    raise HTTPException(status_code=502, detail="Audio stream URL unavailable")
+    raise HTTPException(status_code=404, detail="Audio stream unavailable")
 
 
 @api_router.get("/catalog/download/{track_id}")

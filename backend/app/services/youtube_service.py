@@ -64,6 +64,31 @@ class YouTubeService:
         return source_data
 
     @classmethod
+    async def resolve_video_id(cls, query: str) -> Optional[str]:
+        """Directly searches YouTube for the top video ID matching query, without fallbacks."""
+        return await asyncio.to_thread(cls._sync_resolve_video_id, query)
+
+    @classmethod
+    def _sync_resolve_video_id(cls, query: str) -> Optional[str]:
+        ydl_opts = {
+            "quiet": True,
+            "extract_flat": True,
+            "skip_download": True,
+            "no_warnings": True,
+            "socket_timeout": 8,
+            "default_search": "ytsearch1",
+        }
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                result = ydl.extract_info(f"ytsearch1:{query}", download=False)
+                entries = result.get("entries", []) if result else []
+                if entries and entries[0]:
+                    return entries[0].get("id")
+        except Exception as e:
+            logger.warning("yt-dlp resolve failed for '%s': %s", query, e)
+        return None
+
+    @classmethod
     async def search(cls, query: str, limit: int = 10) -> List[Track]:
         """Runs fast cached search across YouTube with instant fallback to iTunes global catalog."""
         return await asyncio.to_thread(cls._sync_search, query, limit)

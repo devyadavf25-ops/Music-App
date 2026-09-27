@@ -18,13 +18,18 @@ const API_BASE = (() => {
       if (stored) return stored;
     } catch (_) {}
 
-    // 2. Dev mode on localhost or local file preview
+    // 2. When running through dev-server on port 3000, use relative path so transparent proxy handles it
+    if (window.location && window.location.port === "3000") {
+      return "/api/v1";
+    }
+
+    // 3. Dev mode on localhost or local file preview
     const host = window.location.hostname;
     if (host === "localhost" || host === "127.0.0.1" || !host) {
       return "http://127.0.0.1:8001/api/v1";
     }
   }
-  // 3. Deployed production Render backend
+  // 4. Deployed production Render backend
   return "https://aura-music-api.onrender.com/api/v1";
 })();
 
@@ -453,8 +458,8 @@ async function executeSearch(query) {
             album_id: `alb_itunes_${item.collectionId || idx}`,
             duration_seconds: Math.round((item.trackTimeMillis || 180000) / 1000),
             track_number: item.trackNumber || (idx + 1),
-            genre_name: item.primaryGenreName || "Music",
-            stream_url: item.previewUrl,
+            stream_url: `${API_BASE}/catalog/audio/itunes_${item.trackId}?title=${encodeURIComponent(item.trackName || "")}&artist=${encodeURIComponent(item.artistName || "")}`,
+            _previewUrl: item.previewUrl || "",
             cover_art_url: (item.artworkUrl100 || "").replace("100x100bb.jpg", "600x600bb.jpg") || "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&auto=format&fit=crop&q=80",
             audio_format: "aac_256",
             sample_rate: 44100,
@@ -466,7 +471,7 @@ async function executeSearch(query) {
             acousticness: 0.25,
             popularity: 90,
             dynamicScore: 92,
-            explanation: `Global Master Recording · Instant Mobile Stream`
+            explanation: `Full Song · YouTube Audio Stream`
           }));
         }
       } catch (err) {
@@ -732,16 +737,8 @@ function isMobileDevice() {
 // Default to 0 (FULL LENGTH) for all devices so full songs play uninterrupted
 let snippetDuration = (() => {
   try {
-    const saved = localStorage.getItem("aura_snippet_duration");
-    if (saved === "30" || saved === "15") {
-      // Clear legacy forced mobile clip limit so users get full songs
-      localStorage.removeItem("aura_snippet_duration");
-      return 0;
-    }
-    if (saved !== null) {
-      const val = parseInt(saved, 10);
-      if (!isNaN(val) && val >= 0) return val;
-    }
+    // Clear any previous snippet duration limit so all tracks play full length
+    localStorage.removeItem("aura_snippet_duration");
   } catch (_) {}
   return 0; // Default: 0 = Full song playback
 })();
@@ -794,7 +791,7 @@ function updateSnippetDisplay() {
 }
 
 
-// Background resolver: replaces 30-second iTunes search clips with full-length YouTube songs
+// Background resolver: replaces search clips with full-length YouTube songs
 async function resolveFullTrackForItunes(track) {
   try {
     const res = await fetch(`${API_BASE}/youtube/resolve?title=${encodeURIComponent(track.title)}&artist=${encodeURIComponent(track.artist_name || "")}`);
@@ -806,15 +803,8 @@ async function resolveFullTrackForItunes(track) {
         track.duration_seconds = data.duration_seconds || track.duration_seconds;
         track.id = `yt_${data.video_id}`;
         
-        // If this track is currently active, transition smoothly to the full length stream
+        // If this track is currently active, update duration and badge
         if (currentTrack && (currentTrack.title === track.title)) {
-          const curTime = audio.currentTime;
-          const wasPlaying = !audio.paused;
-          audio.src = fullUrl;
-          audio.currentTime = curTime;
-          if (wasPlaying) {
-            audio.play().catch(e => console.warn("Seamless resume error:", e));
-          }
           const totalTimeLabel = document.getElementById("total-time-label");
           if (totalTimeLabel && snippetDuration === 0) {
             totalTimeLabel.innerText = formatTime(track.duration_seconds);
@@ -878,22 +868,18 @@ function loadCurrentTrack(track) {
       document.getElementById("current-badge-text").innerText = "Connecting YouTube Stream...";
       audio.src = `${API_BASE}/youtube/audio/${videoId}`;
     } else if (isItunes) {
-      // Check if already resolved to full YouTube audio
       if (track.full_stream_url) {
         audio.src = track.full_stream_url;
       } else {
-        // Start playing immediately and resolve full track in background
-        if (track.stream_url && track.stream_url.startsWith("http")) {
-          audio.src = track.stream_url;
-        } else {
-          audio.src = `${API_BASE}/catalog/audio/${track.id}`;
-        }
+        document.getElementById("current-badge-text").innerText = "Connecting Full Audio Stream...";
+        // Set audio.src directly to our full-song resolver endpoint so full playback starts immediately
+        audio.src = `${API_BASE}/catalog/audio/${track.id}?title=${encodeURIComponent(track.title)}&artist=${encodeURIComponent(track.artist_name || "")}`;
         resolveFullTrackForItunes(track);
       }
     } else if (track.stream_url && track.stream_url.startsWith("http")) {
       audio.src = track.stream_url;
     } else {
-      audio.src = `${API_BASE}/catalog/audio/${track.id}`;
+      audio.src = `${API_BASE}/catalog/audio/${track.id}?title=${encodeURIComponent(track.title)}&artist=${encodeURIComponent(track.artist_name || "")}`;
     }
   }
   audio.load();
@@ -925,6 +911,20 @@ function playAudio() {
     recentPlayed.add(currentTrack.id);
   }).catch(e => {
     console.warn("Audio play failed:", e);
+    // If backend is offline and we have an iTunes preview, play it as fallback so user still gets sound
+    if (currentTrack && currentTrack._previewUrl && audio.src !== currentTrack._previewUrl) {
+      console.info("Falling back to iTunes preview clip because backend stream is offline");
+      audio.src = currentTrack._previewUrl;
+      audio.play().then(() => {
+        isPlaying = true;
+        document.getElementById("icon-play").style.display = "none";
+        document.getElementById("icon-pause").style.display = "block";
+        showToast("Offline Sample", "Playing 30s sample. Connect to backend for full 4-min song.", "ℹ️");
+      }).catch(err2 => {
+        showToast("Playback unavailable", "Audio source could not be played.", "⚠️");
+      });
+      return;
+    }
     showToast("Playback unavailable", "The audio source could not be played. Check that the backend is running.", "⚠️");
   });
 }
@@ -959,7 +959,7 @@ audio.addEventListener("timeupdate", () => {
     if (isAutoAdvancing) return;
     isAutoAdvancing = true;
     audio.pause();
-    showToast("Mobile Clip Finished", `${snippetDuration}s preview completed. Moving to next track...`, "⏭️");
+    showToast("Snippet Finished", `${snippetDuration}s preview completed. Moving to next track...`, "⏭️");
     setTimeout(() => {
       isAutoAdvancing = false;
       nextTrack();
@@ -1818,13 +1818,8 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 window.addEventListener("resize", () => {
-  // If user hasn't explicitly set preference, adapt default for mobile
-  try {
-    if (localStorage.getItem("aura_snippet_duration") === null) {
-      snippetDuration = isMobileDevice() ? 30 : 0;
-      updateSnippetDisplay();
-    }
-  } catch (_) {}
+  // Maintain snippet UI display state without forcing 30s limit on mobile
+  updateSnippetDisplay();
 });
 
 // Real-time network transitions

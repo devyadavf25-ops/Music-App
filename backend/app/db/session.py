@@ -41,6 +41,17 @@ def get_database_url() -> str:
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql://", 1)
     
+    # If using postgresql:// without an explicit driver suffix, ensure compatibility
+    if url.startswith("postgresql://"):
+        try:
+            import psycopg  # psycopg (v3)
+        except ImportError:
+            try:
+                import psycopg2  # fallback to psycopg2 if psycopg (v3) is not installed
+                url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
+            except ImportError:
+                pass
+
     return url
 
 

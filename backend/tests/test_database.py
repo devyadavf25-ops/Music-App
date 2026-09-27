@@ -97,3 +97,15 @@ def test_database_status_endpoint(client):
     assert status["tracks"] >= 8
     assert status["artists"] >= 4
     assert status["playlists"] >= 1
+
+
+def test_catalog_stream_and_honesty_headers(client):
+    """Verify stream details and audiophile honesty headers."""
+    res = client.get("/api/v1/stream/trk_001")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["track_id"] == "trk_001"
+    assert data["verified_lossless"] is True
+    assert res.headers["x-delivered-bit-depth"] == "24"
+    assert res.headers["x-audio-codec"] == "flac_hi_res"
+

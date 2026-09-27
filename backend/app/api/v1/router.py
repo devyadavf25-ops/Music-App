@@ -6,6 +6,7 @@ hybrid library reconciliation, and user-centric royalty endpoints.
 import asyncio
 import logging
 import os
+import re
 
 from fastapi import APIRouter, HTTPException, Query, Response, Depends, Request
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse

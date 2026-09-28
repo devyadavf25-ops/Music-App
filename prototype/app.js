@@ -988,21 +988,17 @@ function playAudio() {
     recentPlayed.add(currentTrack.id);
   }).catch(e => {
     console.warn("Audio play failed:", e);
-    // If backend is offline and we have an iTunes preview, play it as fallback so user still gets sound
-    if (currentTrack && currentTrack._previewUrl && audio.src !== currentTrack._previewUrl) {
-      console.info("Falling back to iTunes preview clip because backend stream is offline");
-      audio.src = currentTrack._previewUrl;
-      audio.play().then(() => {
-        isPlaying = true;
-        document.getElementById("icon-play").style.display = "none";
-        document.getElementById("icon-pause").style.display = "block";
-        showToast("Offline Sample", "Playing 30s sample. Connect to backend for full 4-min song.", "ℹ️");
-      }).catch(err2 => {
-        showToast("Playback unavailable", "Audio source could not be played.", "⚠️");
-      });
-      return;
-    }
-    showToast("Playback unavailable", "The audio source could not be played. Check that the backend is running.", "⚠️");
+    isPlaying = false;
+    document.getElementById("icon-play").style.display = "block";
+    document.getElementById("icon-pause").style.display = "none";
+    const badge = document.getElementById("current-badge-text");
+    const needsBackend = currentTrack && /^(itunes_|yt_)/.test(currentTrack.id);
+    if (badge) badge.innerText = needsBackend ? "Full Audio Stream Unavailable" : "Audio Source Unavailable";
+    showToast(
+      needsBackend ? "Full playback unavailable" : "Playback unavailable",
+      needsBackend ? "The full audio backend could not provide this track. No short preview was started." : "The audio source could not be played.",
+      "⚠️"
+    );
   });
 }
 
@@ -1052,6 +1048,10 @@ audio.addEventListener("timeupdate", () => {
 audio.addEventListener("loadedmetadata", () => {
   if (snippetDuration === 0 && audio.duration) {
     document.getElementById("total-time-label").innerText = formatTime(Math.floor(audio.duration));
+  }
+  if (currentTrack && /^(itunes_|yt_)/.test(currentTrack.id)) {
+    const badge = document.getElementById("current-badge-text");
+    if (badge) badge.innerText = `Full Audio Stream · ${formatTime(Math.floor(audio.duration))}`;
   }
 });
 

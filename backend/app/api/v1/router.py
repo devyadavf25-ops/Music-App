@@ -527,10 +527,8 @@ async def stream_catalog_audio(
             except Exception as e:
                 logger.warning("Failed to auto-resolve YouTube stream for %s (%s): %s", track_id, search_term, e)
 
-        # Fallback to preview URL only if full song resolution fails
-        preview_url = YouTubeService.get_itunes_preview(track_id)
-        if preview_url:
-            return RedirectResponse(url=preview_url, status_code=307)
+        if track_id.startswith("itunes_"):
+            raise HTTPException(status_code=404, detail="Full-length audio stream unavailable")
         if reg_track and reg_track.stream_url and reg_track.stream_url.startswith("http"):
             return RedirectResponse(url=reg_track.stream_url, status_code=307)
 

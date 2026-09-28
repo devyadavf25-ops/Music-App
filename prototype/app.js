@@ -37,6 +37,94 @@ const API_BASE = (() => {
 // Catalog fallback fixtures (always instant, syncs with backend/app/services/catalog_service.py)
 const CATALOG_TRACKS = [
   {
+    id: "trk_ref_1",
+    title: "Starlit Reverie",
+    artist_id: "art_budiarti",
+    artist_name: "Budiarti",
+    album_title: "8 songs",
+    duration_seconds: 248,
+    isrc: "ID-BU1-24-00001",
+    genre_name: "Lofi Instrumental",
+    bpm: 110,
+    musical_key: "C Major",
+    energy: 0.58,
+    valence: 0.65,
+    acousticness: 0.45,
+    popularity: 96,
+    stream_url: "https://commondatastorage.googleapis.com/codeskulptor-demos/riceracer_soundtrack.mp3",
+    cover_art_url: "discover_art.jpg",
+    audio_format: "flac_hi_res",
+    sample_rate: 96000,
+    bit_depth: 24,
+    lyrics: "Starlit reverie, glowing in the quiet night\nSoft whispers beneath neon light..."
+  },
+  {
+    id: "trk_ref_2",
+    title: "Midnight Confessions",
+    artist_id: "art_budiarti",
+    artist_name: "Budiarti",
+    album_title: "8 songs",
+    duration_seconds: 215,
+    isrc: "ID-BU1-24-00002",
+    genre_name: "Soul & Chill",
+    bpm: 98,
+    musical_key: "G Minor",
+    energy: 0.62,
+    valence: 0.52,
+    acousticness: 0.50,
+    popularity: 94,
+    stream_url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+    cover_art_url: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80",
+    audio_format: "flac_hi_res",
+    sample_rate: 96000,
+    bit_depth: 24,
+    lyrics: "Midnight confessions under indigo skies\nWatching the shadows as the morning arrives..."
+  },
+  {
+    id: "trk_ref_3",
+    title: "Slow and Revive",
+    artist_id: "art_budiarti",
+    artist_name: "Budiarti",
+    album_title: "8 songs",
+    duration_seconds: 198,
+    isrc: "ID-BU1-24-00003",
+    genre_name: "Acoustic Ambient",
+    bpm: 90,
+    musical_key: "E Major",
+    energy: 0.42,
+    valence: 0.70,
+    acousticness: 0.85,
+    popularity: 91,
+    stream_url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+    cover_art_url: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80",
+    audio_format: "alac_lossless",
+    sample_rate: 44100,
+    bit_depth: 16,
+    lyrics: "Breathe in the silence, let the melody flow\nRevive the heartbeat nice and slow..."
+  },
+  {
+    id: "trk_ref_4",
+    title: "Salina Gomez mix",
+    artist_id: "art_budiarti",
+    artist_name: "Budiarti",
+    album_title: "8 songs",
+    duration_seconds: 260,
+    isrc: "ID-BU1-24-00004",
+    genre_name: "Electronic Chillstep",
+    bpm: 114,
+    musical_key: "F Major",
+    energy: 0.68,
+    valence: 0.75,
+    acousticness: 0.20,
+    popularity: 93,
+    stream_url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
+    cover_art_url: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=600&auto=format&fit=crop&q=80",
+    audio_format: "flac_hi_res",
+    sample_rate: 96000,
+    bit_depth: 24,
+    lyrics: "Bass reverberates across the floor\nTaking us where we've never been before..."
+  },
+  {
     id: "trk_001",
     title: "Cosmic Horizon",
     artist_id: "art_solaris",
@@ -668,26 +756,15 @@ function renderTracks() {
       <div class="track-details">
         <div class="track-title-row">
           <strong>${track.title}</strong>
-          ${formatBadge}
+          ${isYouTube ? formatBadge : ''}
         </div>
         <div class="track-meta-row">
-          <span>${track.artist_name}</span>
-          <span>&bull;</span>
-          <span>${track.album_title}</span>
-          ${isYouTube ? '' : `<span>&bull;</span><span style="color: #a78bfa;">${track.bpm} BPM &bull; ${track.musical_key}</span>`}
-        </div>
-        <div class="transparency-tag">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3z"/></svg>
-          <span>${track.explanation || (isYouTube ? 'Live search result from YouTube' : 'Algorithmic match')}</span>
+          <span>By ${track.artist_name} &bull; ${track.album_title || '8 songs'}</span>
         </div>
       </div>
-      <div class="track-duration">${formatTime(track.duration_seconds)}</div>
       <div class="track-actions">
-        <button class="track-download-btn ${isDownloaded ? 'downloaded' : ''} ${isDownloading ? 'downloading' : ''}" onclick="event.stopPropagation(); downloadTrack('${track.id}')" title="${downloadLabel}" aria-label="${downloadLabel}" ${isDownloaded || isDownloading ? 'aria-disabled="true"' : ''}>
-          ${downloadGlyph}
-        </button>
         <button class="track-play-btn" title="Play" aria-label="Play ${track.title}">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>
         </button>
       </div>
     `;

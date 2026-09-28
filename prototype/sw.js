@@ -3,7 +3,7 @@
  * Enables 100% offline standalone usage on iOS and Android Home Screens.
  */
 
-const CACHE_NAME = "aura-music-v2.0";
+const CACHE_NAME = "aura-music-v3.0";
 
 const PRECACHE_ASSETS = [
   "./",

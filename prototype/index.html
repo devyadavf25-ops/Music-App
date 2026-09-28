@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Aura Music Platform — Next-Gen AI & Audiophile iOS Experience</title>
   <meta name="description" content="Next-Generation AI-Driven iOS Music Platform prototype with 0-100% Recommendation Variance Slider, 4-mode shuffle, hybrid library reconciliation, and user-centric royalties.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -14,126 +14,90 @@
   <link rel="icon" type="image/svg+xml" href="icon.svg">
   <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
-  <meta name="theme-color" content="#0a0c14">
+  <meta name="theme-color" content="#1a0a3e">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Aura Music">
   
-  <link rel="stylesheet" href="styles.css?v=2.0">
+  <link rel="stylesheet" href="styles.css?v=3.0">
 </head>
 <body>
+  <!-- Animated Background -->
   <div class="app-background">
     <div class="glow-orb orb-1"></div>
     <div class="glow-orb orb-2"></div>
+    <div class="glow-orb orb-3"></div>
   </div>
 
-  <div class="app-layout">
-    <!-- Sidebar Navigation -->
-    <aside class="sidebar">
-      <div class="brand">
-        <div class="logo-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M9 18V5l12-2v13"></path>
-            <circle cx="6" cy="18" r="3"></circle>
-            <circle cx="18" cy="16" r="3"></circle>
-          </svg>
+  <div class="app-shell">
+    <!-- ===== MOBILE HEADER ===== -->
+    <header class="mobile-header">
+      <div class="header-left">
+        <div class="user-avatar-circle" id="user-avatar">
+          <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80" alt="User Avatar">
         </div>
-        <div class="brand-text">
-          <span class="brand-title">AURA</span>
-          <span class="brand-badge">MUSIC</span>
+        <div class="greeting-block">
+          <span class="greeting-hello">Hello 👋</span>
+          <span class="greeting-name">Dev Kumar</span>
         </div>
       </div>
+      <div class="header-right">
+        <button class="header-icon-btn" onclick="document.getElementById('search-input').focus(); document.querySelector('.search-overlay').classList.add('open');" title="Search">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        </button>
+        <button class="header-icon-btn notification-btn" title="Notifications">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+          <span class="notif-dot"></span>
+        </button>
+      </div>
+    </header>
 
-      <nav class="nav-links">
-        <button class="nav-item active" id="tab-for-you" onclick="switchTab('home')">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
-          <span>For You</span>
-        </button>
-        <button class="nav-item" id="tab-reconciliation" onclick="switchTab('reconciliation')">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-          <span>Hybrid Library</span>
-        </button>
-        <button class="nav-item" id="tab-offline" onclick="switchTab('offline')">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-          <span>Offline Vault</span>
-          <span class="nav-badge" id="sidebar-offline-count">0</span>
-        </button>
-        <button class="nav-item" id="tab-royalties" onclick="switchTab('royalties')">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-          <span>Royalties</span>
-        </button>
-      </nav>
-
-      <div class="sidebar-honesty-card">
-        <div class="honesty-badge-header">
-          <span class="pulse-dot"></span>
-          <span>AUDIO QUALITY</span>
+    <!-- ===== SEARCH OVERLAY ===== -->
+    <div class="search-overlay">
+      <div class="search-overlay-inner">
+        <div class="search-bar-glass">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          <input type="text" id="search-input" placeholder="Search any song, artist, album..." oninput="handleSearch(this.value)">
+          <span id="search-spinner" class="search-spinner" style="display: none;"></span>
+          <button class="search-close-btn" onclick="document.querySelector('.search-overlay').classList.remove('open'); document.getElementById('search-input').value=''; handleSearch('');">✕</button>
         </div>
-        <div class="tech-metrics" id="sidebar-metrics">
-          <div><span>Format</span><strong>24-bit / 96 kHz</strong></div>
-          <div><span>Output</span><strong id="sidebar-route">DAC Direct</strong></div>
-          <div><span>Status</span><strong class="text-emerald" id="sidebar-status">Lossless</strong></div>
+        <div class="source-pills">
+          <button class="source-pill active" id="src-all" onclick="setSearchSource('all')">All</button>
+          <button class="source-pill yt-pill" id="src-yt" onclick="setSearchSource('youtube')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+            YouTube
+          </button>
+          <button class="source-pill" id="src-lossless" onclick="setSearchSource('lossless')">Lossless</button>
         </div>
       </div>
-    </aside>
+    </div>
 
-    <!-- Main Content Area -->
-    <main class="main-content">
-      <!-- Top Bar -->
-      <header class="topbar">
-        <div class="search-container">
-          <div class="search-box">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-            <input type="text" id="search-input" placeholder="Search any song, artist, album, or YouTube track..." oninput="handleSearch(this.value)">
-            <span id="search-spinner" class="search-spinner" style="display: none;"></span>
-          </div>
-          <div class="source-pills">
-            <button class="source-pill active" id="src-all" onclick="setSearchSource('all')">All</button>
-            <button class="source-pill yt-pill" id="src-yt" onclick="setSearchSource('youtube')">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
-              YouTube
-            </button>
-            <button class="source-pill" id="src-lossless" onclick="setSearchSource('lossless')">Lossless</button>
-          </div>
-        </div>
-        <div class="topbar-right" style="display: flex; align-items: center; gap: 10px;">
-          <!-- Offline Mode Toggle Switch -->
-          <div class="offline-toggle-container" id="offline-toggle-box" title="Toggle 100% Offline Mode (Airplane / No Internet)">
-            <span class="offline-pulse-dot" id="offline-dot"></span>
-            <span class="offline-status-text" id="offline-mode-status-text">Online</span>
-            <label class="switch">
-              <input type="checkbox" id="offline-mode-toggle" onchange="toggleOfflineMode(this.checked)">
-              <span class="slider"></span>
-            </label>
-          </div>
+    <!-- ===== BOTTOM NAVIGATION ===== -->
+    <nav class="bottom-nav">
+      <button class="bottom-nav-item active" id="tab-for-you" onclick="switchTab('home')">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+        <span>Home</span>
+      </button>
+      <button class="bottom-nav-item" id="tab-reconciliation" onclick="switchTab('reconciliation')">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+        <span>Library</span>
+      </button>
+      <button class="bottom-nav-item" id="tab-offline" onclick="switchTab('offline')">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+        <span>Offline</span>
+        <span class="nav-badge" id="sidebar-offline-count">0</span>
+      </button>
+      <button class="bottom-nav-item" id="tab-royalties" onclick="switchTab('royalties')">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+        <span>Royalties</span>
+      </button>
+    </nav>
 
-          <!-- Install App to Phone Button -->
-          <button id="pwa-install-btn" class="pwa-install-btn" style="display: none;" onclick="triggerPwaInstall()" title="Install Aura Music to your Phone Home Screen">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-            <span>Install App</span>
-          </button>
-
-          <!-- Import Audio File -->
-          <button class="import-top-btn" onclick="document.getElementById('file-picker-hidden').click()" title="Import local MP3, M4A, FLAC, or WAV songs to offline library">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-            <span>Import Music</span>
-          </button>
-          <input type="file" id="file-picker-hidden" accept="audio/*" multiple style="display: none;" onchange="handleLocalFilesImport(event)">
-
-          <button id="api-status-pill" class="api-status-btn" onclick="openApiSettings()" title="Click to view or update your Backend API URL">
-            <span class="status-dot"></span>
-            <span id="api-status-label">Cloud API</span>
-          </button>
-          <div class="user-pill">
-            <span class="avatar">DY</span>
-            <span class="username">Dev Kumar</span>
-            <span class="user-tier-badge">AUDIOPHILE TIER</span>
-          </div>
-        </div>
-      </header>
-
-      <!-- Airplane / Offline Mode Notification Banner -->
+    <!-- ===== MAIN CONTENT SCROLLABLE ===== -->
+    <main class="main-scroll-area">
+      
+      <!-- Offline Mode Banner -->
       <div id="offline-active-banner" class="offline-banner" style="display: none;">
         <div class="offline-banner-content">
           <span class="offline-banner-icon">✈️</span>
@@ -145,73 +109,112 @@
         <button class="btn-banner-action" onclick="toggleOfflineMode(false)">Turn Online</button>
       </div>
 
-      <!-- View: Home / For You -->
+      <!-- ===== VIEW: HOME / FOR YOU ===== -->
       <section id="view-home" class="view-panel active">
-        <!-- Discovery Variance Controller -->
-        <div class="variance-hero-card">
-          <div class="variance-header">
-            <div class="variance-title-group">
-              <h2>Discovery Control</h2>
-              <p>Tune from familiar favorites to new discoveries.</p>
-            </div>
-            <div class="variance-pill-display" id="variance-tier-badge">
-              <span id="tier-name">Balanced</span>
-              <span class="tier-percent" id="tier-val">50%</span>
-            </div>
-          </div>
+        
+        <!-- Category Filter Pills -->
+        <div class="category-pills-row">
+          <button class="category-pill active" onclick="filterCategory('all', this)">All</button>
+          <button class="category-pill" onclick="filterCategory('new', this)">New Release</button>
+          <button class="category-pill" onclick="filterCategory('trending', this)">Trending</button>
+          <button class="category-pill" onclick="filterCategory('popular', this)">Most Played</button>
+        </div>
 
-          <div class="variance-slider-wrapper">
-            <div class="slider-track-container">
-              <input type="range" id="variance-slider" min="0" max="100" value="50" oninput="updateVariance(this.value)" aria-label="Recommendation Discovery Variance">
-              <div class="slider-stops">
-                <span class="stop-label" style="left: 0%;">Familiar</span>
-                <span class="stop-label" style="left: 50%;">Balanced</span>
-                <span class="stop-label" style="left: 100%;">Discovery</span>
+        <!-- Curated & Trending Section (Screen 1) -->
+        <div class="section-block">
+          <h2 class="section-title">Curated & trending</h2>
+          <div class="featured-cards-scroll">
+            <div class="featured-card" onclick="selectTrack(0)">
+              <div class="featured-card-art-right" style="background-image: url('discover_art.jpg');"></div>
+              <div class="featured-card-content">
+                <h3>Discover weekly</h3>
+                <p>The original slow instrumental best paly lists.</p>
+                <div class="featured-card-actions">
+                  <button class="featured-play-btn" onclick="event.stopPropagation(); selectTrack(0);" title="Play Discover Weekly">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>
+                  </button>
+                  <button class="featured-action-btn" onclick="event.stopPropagation(); toggleFavorite();" title="Like">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                  </button>
+                  <button class="featured-action-btn" onclick="event.stopPropagation(); downloadCurrentTrack();" title="Download">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                  </button>
+                  <button class="featured-action-btn" onclick="event.stopPropagation(); openArtistSupport();" title="More">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1.5"></circle><circle cx="19" cy="12" r="1.5"></circle><circle cx="5" cy="12" r="1.5"></circle></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="featured-card" onclick="selectTrack(1)">
+              <div class="featured-card-art-right" style="background-image: url('now_playing_art.jpg');"></div>
+              <div class="featured-card-content">
+                <h3>Drive Nights</h3>
+                <p>Synthwave & retro beats for late night drives.</p>
+                <div class="featured-card-actions">
+                  <button class="featured-play-btn" onclick="event.stopPropagation(); selectTrack(1);" title="Play Drive Nights">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>
+                  </button>
+                  <button class="featured-action-btn" onclick="event.stopPropagation(); toggleFavorite();" title="Like">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                  </button>
+                  <button class="featured-action-btn" onclick="event.stopPropagation(); downloadTrack('trk_ref_2');" title="Download">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                  </button>
+                  <button class="featured-action-btn" onclick="event.stopPropagation();" title="More">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1.5"></circle><circle cx="19" cy="12" r="1.5"></circle><circle cx="5" cy="12" r="1.5"></circle></svg>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-
-          <p class="tier-description" id="tier-description">
-            A curated equilibrium between trusted favorites and smoothly connected songs.
-          </p>
         </div>
 
-        <!-- Shuffle Modes -->
-        <div class="shuffle-section">
-          <div class="section-header-inline">
-            <h3>Shuffle Mode</h3>
+        <!-- Collapsible Discovery & Shuffle Drawer (Tucked away to preserve Screen 1 layout) -->
+        <div class="variance-collapsible" id="variance-collapsible" style="display: none;">
+          <div class="variance-hero-card compact-card">
+            <div class="variance-header">
+              <div class="variance-title-group">
+                <h2>Discovery Control</h2>
+              </div>
+              <div class="variance-pill-display" id="variance-tier-badge">
+                <span id="tier-name">Balanced</span>
+                <span class="tier-percent" id="tier-val">50%</span>
+              </div>
+            </div>
+            <div class="variance-slider-wrapper">
+              <div class="slider-track-container">
+                <input type="range" id="variance-slider" min="0" max="100" value="50" oninput="updateVariance(this.value)" aria-label="Recommendation Discovery Variance">
+                <div class="slider-stops">
+                  <span class="stop-label" style="left: 0%;">Familiar</span>
+                  <span class="stop-label" style="left: 50%;">Balanced</span>
+                  <span class="stop-label" style="left: 100%;">Discovery</span>
+                </div>
+              </div>
+            </div>
+            <p class="tier-description" id="tier-description">A curated equilibrium between trusted favorites and smoothly connected songs.</p>
           </div>
-          <div class="shuffle-modes-row">
-            <button class="shuffle-pill active" id="shuffle-standard" onclick="selectShuffleMode('standard')">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="16 3 21 3 21 8"></polyline><line x1="4" y1="20" x2="21" y2="3"></line><polyline points="21 16 21 21 16 21"></polyline><line x1="15" y1="15" x2="21" y2="21"></line><line x1="4" y1="4" x2="9" y2="9"></line></svg>
-              Standard
-            </button>
-            <button class="shuffle-pill" id="shuffle-true" onclick="selectShuffleMode('true')">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
-              True
-            </button>
-            <button class="shuffle-pill" id="shuffle-smart" onclick="selectShuffleMode('smart')">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-              Smart
-            </button>
-            <button class="shuffle-pill" id="shuffle-discovery" onclick="selectShuffleMode('discovery')">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
-              Discovery
-            </button>
+
+          <div class="shuffle-section">
+            <div class="shuffle-modes-row">
+              <button class="shuffle-pill active" id="shuffle-standard" onclick="selectShuffleMode('standard')">Standard</button>
+              <button class="shuffle-pill" id="shuffle-true" onclick="selectShuffleMode('true')">True</button>
+              <button class="shuffle-pill" id="shuffle-smart" onclick="selectShuffleMode('smart')">Smart</button>
+              <button class="shuffle-pill" id="shuffle-discovery" onclick="selectShuffleMode('discovery')">Discovery</button>
+            </div>
           </div>
         </div>
 
-        <!-- Personalized Feed & Track List -->
+        <!-- Top daily playlists (Screen 1) -->
         <div class="tracks-section">
           <div class="section-header-inline">
-            <div>
-              <h2>Your Queue</h2>
-              <span class="section-caption" id="feed-caption">8 tracks · 50% variance</span>
+            <h2 class="section-title">Top daily playlists</h2>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <button class="tuning-toggle-btn" onclick="toggleDiscoveryDrawer()" title="Tune Discovery Variance">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
+              </button>
+              <button class="see-all-btn" onclick="fetchLiveRecommendations()">See all</button>
             </div>
-            <button class="refresh-feed-btn" onclick="fetchLiveRecommendations()">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-              Refresh
-            </button>
           </div>
 
           <div class="track-list" id="track-list-container">
@@ -220,307 +223,404 @@
         </div>
       </section>
 
-      <!-- View: Hybrid Library Reconciliation (SRS FR-013, FR-014) -->
+      <!-- ===== VIEW: HYBRID LIBRARY (Screen 2: Your Music Libarry) ===== -->
       <section id="view-reconciliation" class="view-panel">
-        <div class="feature-hero">
-          <span class="section-tag">HYBRID METADATA ENGINE</span>
-          <h1>Local Audio Import & Hybrid Reconciliation</h1>
-          <p>Import local audio files (FLAC, WAV, ALAC, MP3) and reconcile them with the streaming catalog using ISRC codes, acoustic fingerprints, and SHA-256 validation.</p>
+        <div class="library-header-row">
+          <h1 class="library-main-title">Your Music Libarry</h1>
         </div>
 
-        <div class="import-card">
-          <div class="drop-zone" onclick="triggerSimulatedImport()">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-            <h3>Click to Simulate Local File Import</h3>
-            <p>Simulates iOS <code>UIDocumentPickerViewController</code> import with candidate test files.</p>
-          </div>
+        <!-- Category pills for library matching Screen 2 -->
+        <div class="category-pills-row">
+          <button class="category-pill active" onclick="filterCategory('all', this)">All</button>
+          <button class="category-pill" onclick="filterCategory('new', this)">New Release</button>
+          <button class="category-pill" onclick="filterCategory('trending', this)">Trending</button>
+          <button class="category-pill" onclick="filterCategory('popular', this)">Most Played</button>
         </div>
 
-        <div class="reconciliation-results">
-          <h3>Reconciliation Log & Results</h3>
-          <div class="table-container">
-            <table class="reconcile-table">
-              <thead>
-                <tr>
-                  <th>Imported File</th>
-                  <th>Format</th>
-                  <th>Target ISRC</th>
-                  <th>Resolution Status</th>
-                  <th>Matched Streaming Track</th>
-                  <th>Preserved Metadata</th>
-                </tr>
-              </thead>
-              <tbody id="reconcile-table-body">
-                <!-- Injected via JavaScript -->
-              </tbody>
-            </table>
-          </div>
+        <!-- Library Playlists list matching Screen 2 -->
+        <div class="track-list" id="library-track-list">
+          <!-- Injected dynamically by renderLibraryPlaylists() -->
         </div>
 
-        <!-- Offline Downloads Cache (SRS FR-011, FR-012) -->
-        <div class="downloads-cache-section">
-          <div class="section-header-inline">
-            <div>
-              <h3>Smart Offline Downloads Cache</h3>
-              <span class="section-caption">High-fidelity downloaded audio playable offline with no network connection</span>
-            </div>
-            <span class="storage-pill" id="storage-usage-pill">Local Storage: 14.8 MB</span>
+        <!-- Sleek Link to Full Metadata Engine & Import Log -->
+        <div class="library-engine-bar" onclick="openReconciliationModal()">
+          <div class="engine-bar-info">
+            <span class="engine-tag">HYBRID METADATA ENGINE</span>
+            <strong>Import Audio Files & View Reconciliation Log</strong>
+            <p>FLAC, WAV, ALAC, MP3 local file matching & sync</p>
           </div>
-          <div class="table-container">
-            <table class="reconcile-table">
-              <thead>
-                <tr>
-                  <th>Track & Artist</th>
-                  <th>Format & Quality</th>
-                  <th>File Size</th>
-                  <th>Storage Location</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody id="downloads-table-body">
-                <!-- Injected via JavaScript -->
-              </tbody>
-            </table>
-          </div>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
         </div>
       </section>
 
-      <!-- View: User-Centric Royalties (SRS FR-020) -->
+      <!-- ===== VIEW: USER-CENTRIC ROYALTIES ===== -->
       <section id="view-royalties" class="view-panel">
         <div class="feature-hero">
           <span class="section-tag">ARTIST SUSTAINABILITY</span>
-          <h1>User-Centric Revenue Allocation</h1>
-          <p>Unlike traditional pro-rata streaming that channels indie money to mega-popstars, the User-Centric model distributes your exact subscription fee solely to the artists you actually played.</p>
+          <h1>User-Centric Revenue</h1>
+          <p>Your subscription fee goes solely to the artists you actually played.</p>
         </div>
 
         <div class="royalty-summary-grid">
-          <div class="stat-card">
+          <div class="stat-card glass-card">
             <span class="stat-label">Monthly Subscription</span>
             <span class="stat-value" id="royalty-sub-amount">$16.99</span>
             <span class="stat-sub">Audiophile Tier</span>
           </div>
-          <div class="stat-card">
+          <div class="stat-card glass-card">
             <span class="stat-label">Net Artist Pool (70%)</span>
             <span class="stat-value text-purple" id="royalty-pool-amount">$11.89</span>
-            <span class="stat-sub">30% platform infrastructure fee</span>
+            <span class="stat-sub">30% platform fee</span>
           </div>
-          <div class="stat-card">
-            <span class="stat-label">Total Completed Plays</span>
+          <div class="stat-card glass-card">
+            <span class="stat-label">Total Plays</span>
             <span class="stat-value" id="royalty-streams-count">40 Plays</span>
             <span class="stat-sub">This billing cycle</span>
           </div>
-          <div class="stat-card">
+          <div class="stat-card glass-card">
             <span class="stat-label">Artists Supported</span>
             <span class="stat-value text-emerald" id="royalty-artists-count">4 Artists</span>
             <span class="stat-sub">Direct allocation</span>
           </div>
         </div>
 
-        <div class="breakdown-card">
-          <h3>Your Direct Artist Payout Statement</h3>
+        <div class="breakdown-card glass-card">
+          <h3>Your Direct Artist Payout</h3>
           <div class="table-container">
             <table class="reconcile-table">
               <thead>
                 <tr>
                   <th>Artist</th>
-                  <th>Your Plays</th>
+                  <th>Plays</th>
                   <th>Share %</th>
-                  <th>From Subscription</th>
-                  <th>Direct Fan Tips</th>
-                  <th>Total Sent to Artist</th>
+                  <th>From Sub</th>
+                  <th>Fan Tips</th>
+                  <th>Total</th>
                 </tr>
               </thead>
               <tbody id="royalty-table-body">
-                <!-- Injected via JavaScript -->
               </tbody>
             </table>
           </div>
         </div>
       </section>
 
-      <!-- View: Dedicated Offline Vault (100% Offline Music Experience) -->
+      <!-- ===== VIEW: OFFLINE VAULT ===== -->
       <section id="view-offline" class="view-panel">
-        <div id="offline-active-banner" class="offline-banner-active" style="display: none;">
-          <div class="banner-left">
-            <span class="offline-pulse-dot"></span>
-            <div>
-              <strong>100% Offline Mode Active</strong>
-              <div style="font-size: 11px; opacity: 0.9;">No network requests are being made. All audio is played from high-bitrate device storage.</div>
-            </div>
-          </div>
-          <button class="offline-btn offline-btn-secondary" onclick="toggleOfflineMode(false)" style="padding: 4px 12px; font-size: 11px;">
-            Exit Offline Mode
-          </button>
-        </div>
-
         <div class="feature-hero">
           <span class="section-tag" style="color: #34d399; border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.1);">ZERO DATA REQUIRED</span>
           <h1>Offline Music Vault</h1>
-          <p>Download your favorite YouTube music, albums, and songs directly to your device storage. Play anytime with zero internet connection, airplane mode support, and 1-click file export to your phone or computer.</p>
+          <p>Download your favorite music directly to your device. Play with zero internet.</p>
         </div>
 
-        <!-- Offline Statistics -->
         <div class="offline-stats-grid">
-          <div class="stat-card">
-            <span class="stat-label">Saved Offline Tracks</span>
+          <div class="stat-card glass-card">
+            <span class="stat-label">Saved Offline</span>
             <span class="stat-value text-emerald" id="offline-stat-count">0 Songs</span>
-            <span class="stat-sub">Ready for airplane mode</span>
+            <span class="stat-sub">Airplane mode ready</span>
           </div>
-          <div class="stat-card">
-            <span class="stat-label">Local Storage Footprint</span>
+          <div class="stat-card glass-card">
+            <span class="stat-label">Storage</span>
             <span class="stat-value text-purple" id="offline-stat-size">0.0 MB</span>
-            <span class="stat-sub">Browser IndexedDB Vault</span>
+            <span class="stat-sub">IndexedDB Vault</span>
           </div>
-          <div class="stat-card">
-            <span class="stat-label">Playback Performance</span>
+          <div class="stat-card glass-card">
+            <span class="stat-label">Performance</span>
             <span class="stat-value" id="offline-stat-quality">Zero Latency</span>
-            <span class="stat-sub">Direct blob streaming (0ms buffering)</span>
+            <span class="stat-sub">0ms buffering</span>
           </div>
-          <div class="stat-card">
-            <span class="stat-label">Network State</span>
+          <div class="stat-card glass-card">
+            <span class="stat-label">Network</span>
             <span class="stat-value text-emerald" id="offline-stat-network">Connected</span>
-            <span class="stat-sub" id="offline-stat-network-sub">Auto-sync enabled</span>
+            <span class="stat-sub" id="offline-stat-network-sub">Auto-sync</span>
           </div>
         </div>
 
-        <!-- Offline Actions & Filter Bar -->
-        <div class="offline-actions-bar">
+        <div class="offline-actions-bar glass-card">
           <div class="offline-search-box">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-            <input type="text" id="offline-filter-input" placeholder="Filter downloaded songs by title or artist..." oninput="filterOfflineList(this.value)">
+            <input type="text" id="offline-filter-input" placeholder="Filter songs..." oninput="filterOfflineList(this.value)">
           </div>
-
           <div class="offline-buttons-group">
-            <button class="offline-btn offline-btn-primary" onclick="downloadRecommendedBatch()" title="Download top recommended tracks for offline listening">
+            <button class="offline-btn offline-btn-primary" onclick="downloadRecommendedBatch()">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-              <span>Download Recommended</span>
+              <span>Download Batch</span>
             </button>
-            <button class="offline-btn offline-btn-secondary" onclick="document.getElementById('file-picker-hidden').click()" title="Import local MP3, M4A, FLAC audio files from your computer">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-              <span>Import Audio Files</span>
+            <button class="offline-btn offline-btn-secondary" onclick="document.getElementById('file-picker-hidden').click()">
+              <span>Import Files</span>
             </button>
-            <button class="offline-btn offline-btn-danger" onclick="clearAllOfflineDownloads()" title="Delete all downloaded songs from storage">
-              <span>Clear Vault</span>
+            <button class="offline-btn offline-btn-danger" onclick="clearAllOfflineDownloads()">
+              <span>Clear</span>
             </button>
           </div>
         </div>
 
-        <!-- Offline Tracks Table -->
-        <div class="breakdown-card">
+        <div class="breakdown-card glass-card">
           <div class="table-container">
             <table class="reconcile-table">
               <thead>
                 <tr>
                   <th>Song & Artist</th>
-                  <th>Quality / Format</th>
-                  <th>File Size</th>
-                  <th>Storage Engine</th>
+                  <th>Quality</th>
+                  <th>Size</th>
+                  <th>Storage</th>
                   <th style="text-align: right;">Actions</th>
                 </tr>
               </thead>
               <tbody id="offline-vault-table-body">
-                <!-- Dynamically rendered via JavaScript -->
               </tbody>
             </table>
           </div>
-          <div id="offline-empty-state" style="display: none; padding: 40px 20px; text-align: center; color: var(--text-dim);">
+          <div id="offline-empty-state" style="display: none; padding: 40px 20px; text-align: center; color: rgba(255,255,255,0.5);">
             <div style="font-size: 36px; margin-bottom: 12px;">📥</div>
-            <h4 style="color: var(--text-primary); margin-bottom: 6px;">Your Offline Vault is Empty</h4>
-            <p style="font-size: 13px; max-width: 420px; margin: 0 auto 16px auto;">Search any YouTube track or browse recommendations and click the Download button to listen anywhere offline with zero internet.</p>
-            <button class="offline-btn offline-btn-primary" onclick="downloadRecommendedBatch()">
-              Download Top 3 Tracks Now
-            </button>
+            <h4 style="color: #fff; margin-bottom: 6px;">Your Offline Vault is Empty</h4>
+            <p style="font-size: 13px; max-width: 420px; margin: 0 auto 16px auto;">Search any track and click Download to listen offline.</p>
+            <button class="offline-btn offline-btn-primary" onclick="downloadRecommendedBatch()">Download Top 3 Tracks Now</button>
           </div>
         </div>
       </section>
     </main>
-  </div>
 
-  <!-- Persistent Full Player Bar (SRS FR-003, FR-004, FR-023) -->
-  <footer class="player-bar">
-    <!-- Visualizer Canvas -->
-    <canvas id="visualizer-canvas" class="visualizer"></canvas>
-
-    <div class="player-content">
-      <!-- Now Playing Track Info -->
-      <div class="now-playing-left">
-        <img id="current-cover" src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80" alt="Album Art" class="now-playing-art">
-        <div class="now-playing-meta">
-          <span class="track-title" id="current-title">Cosmic Horizon</span>
-          <span class="artist-name" id="current-artist">Solaris Echo</span>
-          <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
-            <div class="honesty-pill" id="current-honesty-pill">
-              <span class="dot"></span>
-              <span id="current-badge-text">24-bit / 96 kHz FLAC HI-RES</span>
-            </div>
-            <span class="snippet-badge" id="snippet-badge" style="display: none;">30s Clip</span>
+    <!-- ===== NOW PLAYING BAR (Compact) ===== -->
+    <div class="now-playing-bar" id="now-playing-bar" onclick="openNowPlayingModal()">
+      <canvas id="visualizer-canvas" class="visualizer-mini"></canvas>
+      <div class="npb-content">
+        <div class="npb-left">
+          <img id="current-cover" src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80" alt="Album Art" class="npb-art">
+          <div class="npb-meta">
+            <span class="npb-title" id="current-title">Cosmic Horizon</span>
+            <span class="npb-artist" id="current-artist">Solaris Echo</span>
           </div>
         </div>
-        <button class="icon-btn" onclick="toggleFavorite()" title="Like Track">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="#8b5cf6" stroke="#8b5cf6" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
-        </button>
-      </div>
-
-      <!-- Player Controls -->
-      <div class="player-center">
-        <div class="transport-controls">
-          <button class="control-btn" id="btn-shuffle-toggle" onclick="cycleShuffleMode()" title="Toggle Shuffle Mode">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 3 21 3 21 8"></polyline><line x1="4" y1="20" x2="21" y2="3"></line><polyline points="21 16 21 21 16 21"></polyline><line x1="15" y1="15" x2="21" y2="21"></line><line x1="4" y1="4" x2="9" y2="9"></line></svg>
-          </button>
-          <button class="control-btn" onclick="prevTrack()" title="Previous">
+        <div class="npb-controls">
+          <button class="npb-control-btn" onclick="event.stopPropagation(); prevTrack();" title="Previous">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" stroke-width="3"></line></svg>
           </button>
-          <button class="play-pause-btn" id="btn-play-pause" onclick="togglePlayPause()" title="Play/Pause">
+          <button class="npb-play-btn" id="btn-play-pause" onclick="event.stopPropagation(); togglePlayPause();" title="Play/Pause">
             <svg id="icon-play" width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
             <svg id="icon-pause" width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="display: none;"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
           </button>
-          <button class="control-btn" onclick="nextTrack()" title="Next">
+          <button class="npb-control-btn" onclick="event.stopPropagation(); nextTrack();" title="Next">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="3"></line></svg>
           </button>
-          <button class="control-btn tip-transport-btn" onclick="openArtistSupport()" title="Direct Artist Support">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-          </button>
-
-          <!-- Snippet Mode Selector (15s / 30s / Full) -->
-          <div class="snippet-selector" id="snippet-selector" title="Preview length: Optional 15s/30s clip or full song">
-            <span class="snippet-label">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
-              Clip
-            </span>
-            <button class="snippet-pill-btn" data-duration="15" onclick="setSnippetDuration(15)" title="Play 15-second snippet">15s</button>
-            <button class="snippet-pill-btn" data-duration="30" onclick="setSnippetDuration(30)" title="Play 30-second snippet">30s</button>
-            <button class="snippet-pill-btn" data-duration="0" onclick="setSnippetDuration(0)" title="Play full song">Full</button>
-          </div>
-        </div>
-
-        <div class="progress-bar-container">
-          <span class="time-label" id="current-time-label">0:00</span>
-          <div class="progress-track" id="progress-track" onclick="handleSeek(event)">
-            <div class="progress-fill" id="progress-fill" style="width: 0%;"></div>
-          </div>
-          <span class="time-label" id="total-time-label">4:08</span>
         </div>
       </div>
+      <div class="npb-progress" id="progress-track" onclick="event.stopPropagation(); handleSeek(event);">
+        <div class="npb-progress-fill" id="progress-fill" style="width: 0%;"></div>
+      </div>
+    </div>
 
-      <!-- Right Controls: Volume, Lyrics, Support, Download -->
-      <div class="player-right">
-        <button class="action-pill-btn download-btn" id="btn-download-current" onclick="downloadCurrentTrack()" title="Download song for offline listening">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-          <span id="download-btn-text">Download</span>
+    <!-- ===== NOW PLAYING FULL MODAL (Screen 3) ===== -->
+    <div class="now-playing-modal" id="now-playing-modal">
+      <!-- Full-Bleed Atmospheric Background Cover Art -->
+      <div class="npm-art-backdrop" id="npm-art-backdrop">
+        <div class="npm-backdrop-vignette"></div>
+      </div>
+
+      <!-- Top Header Navigation -->
+      <div class="npm-header">
+        <button class="npm-circle-btn" onclick="closeNowPlayingModal()" title="Back">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
         </button>
-        <button class="action-pill-btn support-btn" onclick="openArtistSupport()">
-          <span>Tip Artist</span>
+        <span class="npm-center-title">Now Playing</span>
+        <button class="npm-circle-btn" onclick="openApiSettings()" title="Settings & Stream Quality">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
         </button>
-        <button class="icon-btn lyrics-btn" onclick="toggleLyricsModal()" title="View Lyrics">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-        </button>
-        <div class="volume-slider-group">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
-          <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="0.85" oninput="handleVolume(this.value)">
+      </div>
+
+      <!-- Middle Spacer for full-bleed artwork aesthetic -->
+      <div class="npm-spacer"></div>
+
+      <!-- Bottom Player Section with Iconic Curved Arc Scrubber -->
+      <div class="npm-bottom-player">
+        
+        <!-- Track Title & Artist -->
+        <div class="npm-meta-info">
+          <h2 class="npm-title" id="npm-title">Starlit Reverie</h2>
+          <p class="npm-artist" id="npm-artist">Budiarti</p>
+          <div class="honesty-pill" id="current-honesty-pill">
+            <span class="dot"></span>
+            <span id="current-badge-text">24-bit / 96 kHz FLAC HI-RES</span>
+          </div>
+        </div>
+
+        <!-- Curved Arc Scrubber Container -->
+        <div class="curved-arc-container" id="curved-arc-container">
+          <svg class="curved-arc-svg" viewBox="0 0 360 160" id="curved-arc-svg" onclick="handleArcSeek(event)">
+            <defs>
+              <linearGradient id="arcActiveGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#ffffff"/>
+                <stop offset="50%" stop-color="#ec4899"/>
+                <stop offset="100%" stop-color="#a855f7"/>
+              </linearGradient>
+              <filter id="arcGlow" x="-30%" y="-30%" width="160%" height="160%">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur"/>
+                <feMerge>
+                  <feMergeNode in="blur"/>
+                  <feMergeNode in="SourceGraphic"/>
+                </feMerge>
+              </filter>
+            </defs>
+            <!-- Background Arc Track -->
+            <path class="arc-bg-path" id="arc-bg-path" d="M 30,135 Q 180,18 330,135" fill="none" stroke="rgba(255, 255, 255, 0.22)" stroke-width="4.5" stroke-linecap="round"/>
+            <!-- Filled Active Arc Progress -->
+            <path class="arc-progress-path" id="arc-progress-path" d="M 30,135 Q 180,18 330,135" fill="none" stroke="url(#arcActiveGrad)" stroke-width="4.5" stroke-linecap="round" stroke-dasharray="330" stroke-dashoffset="330"/>
+            <!-- Glowing Scrubber Knob / Dot -->
+            <circle class="arc-scrubber-dot" id="arc-scrubber-dot" cx="30" cy="135" r="7.5" fill="#ffffff" filter="url(#arcGlow)"/>
+          </svg>
+
+          <!-- Inside Arc Arch: Heart Favorite Button -->
+          <button class="arc-heart-btn" id="npm-heart-btn" onclick="toggleFavorite()" title="Like">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+          </button>
+
+          <!-- Flanking Sides: Shuffle & Repeat Buttons -->
+          <button class="arc-side-btn arc-shuffle-btn" id="btn-shuffle-toggle" onclick="cycleShuffleMode()" title="Shuffle Mode">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 3 21 3 21 8"></polyline><line x1="4" y1="20" x2="21" y2="3"></line><polyline points="21 16 21 21 16 21"></polyline><line x1="15" y1="15" x2="21" y2="21"></line><line x1="4" y1="4" x2="9" y2="9"></line></svg>
+          </button>
+          <button class="arc-side-btn arc-repeat-btn" id="btn-repeat-toggle" onclick="toggleRepeatMode()" title="Repeat Track">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
+          </button>
+
+          <!-- Center: Swirling Galaxy Portal Play/Pause Button flanked by Prev & Next -->
+          <div class="portal-controls-row">
+            <button class="arc-skip-btn" onclick="prevTrack()" title="Previous Track">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" stroke-width="3"></line></svg>
+            </button>
+            
+            <button class="portal-play-btn" id="npm-portal-play" onclick="togglePlayPause()" title="Play / Pause">
+              <div class="portal-vortex-ring"></div>
+              <div class="portal-btn-inner">
+                <svg class="portal-play-icon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>
+                <svg class="portal-pause-icon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" style="display: none;"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+              </div>
+            </button>
+
+            <button class="arc-skip-btn" onclick="nextTrack()" title="Next Track">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="3"></line></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Time Labels -->
+        <div class="npm-time-row">
+          <span class="time-label" id="current-time-label">0:00</span>
+          <span class="time-label" id="total-time-label">4:08</span>
+        </div>
+
+        <!-- Extra Functional Actions -->
+        <div class="npm-extra-row">
+          <button class="npm-extra-btn" id="btn-download-current" onclick="downloadCurrentTrack()" title="Download for Offline">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            <span id="download-btn-text">Download</span>
+          </button>
+          <button class="npm-extra-btn" onclick="openArtistSupport()" title="Tip Artist Directly">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+            <span>Tip Artist</span>
+          </button>
+          <button class="npm-extra-btn" onclick="toggleLyricsModal()" title="View Lyrics">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+            <span>Lyrics</span>
+          </button>
         </div>
       </div>
     </div>
-  </footer>
+
+    <!-- ===== RECONCILIATION & IMPORT MODAL ===== -->
+    <div class="modal-overlay" id="reconcile-modal" style="display: none;">
+      <div class="modal-card glass-modal" style="max-width: 600px; max-height: 85vh; overflow-y: auto;">
+        <div class="modal-header">
+          <div>
+            <span class="section-tag" style="font-size: 10px;">HYBRID METADATA ENGINE</span>
+            <h3 style="margin: 4px 0 0;">Audio Import & Reconciliation</h3>
+          </div>
+          <button class="close-btn" onclick="closeReconciliationModal()">&times;</button>
+        </div>
+        <div class="modal-body" style="padding-top: 14px; display: flex; flex-direction: column; gap: 18px;">
+          <div class="import-card" onclick="triggerSimulatedImport()">
+            <div class="drop-zone">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+              <h4>Click to Import Local Files</h4>
+              <p>Simulates iOS <code>UIDocumentPickerViewController</code> (FLAC, ALAC, WAV, MP3).</p>
+            </div>
+          </div>
+
+          <div class="reconciliation-results">
+            <h4 style="margin-bottom: 8px;">Reconciliation Log & Results</h4>
+            <div class="table-container">
+              <table class="reconcile-table">
+                <thead>
+                  <tr>
+                    <th>Imported File</th>
+                    <th>Format</th>
+                    <th>Target ISRC</th>
+                    <th>Resolution</th>
+                    <th>Preserved Metadata</th>
+                  </tr>
+                </thead>
+                <tbody id="reconcile-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="downloads-cache-section">
+            <div class="section-header-inline" style="margin-bottom: 8px;">
+              <div>
+                <h4 style="margin: 0;">Smart Offline Downloads Cache</h4>
+                <span class="section-caption">IndexedDB Cache</span>
+              </div>
+              <span class="storage-pill" id="storage-usage-pill">Local: 14.8 MB</span>
+            </div>
+            <div class="table-container">
+              <table class="reconcile-table">
+                <thead>
+                  <tr>
+                    <th>Track</th>
+                    <th>Quality</th>
+                    <th>Size</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="downloads-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+      <!-- Snippet Selector -->
+      <div class="snippet-selector" id="snippet-selector">
+        <span class="snippet-label">Clip</span>
+        <button class="snippet-pill-btn" data-duration="15" onclick="setSnippetDuration(15)">15s</button>
+        <button class="snippet-pill-btn" data-duration="30" onclick="setSnippetDuration(30)">30s</button>
+        <button class="snippet-pill-btn" data-duration="0" onclick="setSnippetDuration(0)">Full</button>
+      </div>
+
+      <!-- Volume -->
+      <div class="npm-volume-row">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon></svg>
+        <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="0.85" oninput="handleVolume(this.value)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden elements for existing JS compatibility -->
+  <div style="display:none;">
+    <span id="api-status-label">Cloud API</span>
+    <span id="sidebar-route">DAC Direct</span>
+    <span id="sidebar-status">Lossless</span>
+    <div id="sidebar-metrics"></div>
+    <div id="support-artist-name">Solaris Echo</div>
+    <span id="offline-mode-status-text">Online</span>
+    <span id="offline-dot"></span>
+    <div id="offline-toggle-box">
+      <input type="checkbox" id="offline-mode-toggle" onchange="toggleOfflineMode(this.checked)">
+    </div>
+  </div>
+
+  <input type="file" id="file-picker-hidden" accept="audio/*" multiple style="display: none;" onchange="handleLocalFilesImport(event)">
 
   <!-- Toast Notification -->
   <div class="toast-notification" id="toast-banner">
@@ -531,15 +631,15 @@
     </div>
   </div>
 
-  <!-- Direct Artist Support Modal (SRS FR-019) -->
+  <!-- Direct Artist Support Modal -->
   <div class="modal-overlay" id="support-modal">
-    <div class="modal-card">
+    <div class="modal-card glass-modal">
       <div class="modal-header">
         <h3>Direct Artist Support</h3>
         <button class="close-btn" onclick="closeArtistSupport()">&times;</button>
       </div>
       <div class="modal-body">
-        <p class="modal-lead">Support <strong id="support-artist-name">Solaris Echo</strong> directly. 90% of your contribution is immediately credited to the artist's verified account.</p>
+        <p class="modal-lead">Support <strong id="support-artist-name-display">Solaris Echo</strong> directly. 90% goes to the artist.</p>
         <div class="tip-options">
           <button class="tip-btn active" onclick="selectTip(2, this)">$2</button>
           <button class="tip-btn" onclick="selectTip(5, this)">$5</button>
@@ -553,111 +653,86 @@
     </div>
   </div>
 
-  <!-- Lyrics Modal (SRS FR-023) -->
+  <!-- Lyrics Modal -->
   <div class="modal-overlay" id="lyrics-modal">
-    <div class="modal-card lyrics-card">
+    <div class="modal-card lyrics-card glass-modal">
       <div class="modal-header">
         <h3 id="lyrics-track-title">Cosmic Horizon — Lyrics</h3>
         <button class="close-btn" onclick="toggleLyricsModal()">&times;</button>
       </div>
       <div class="modal-body lyrics-body" id="lyrics-content">
-        <!-- Injected -->
       </div>
     </div>
   </div>
 
-  <!-- Backend & PostgreSQL Database Settings Modal -->
+  <!-- Backend & PostgreSQL Settings Modal -->
   <div class="modal-overlay" id="api-settings-modal" style="display: none;">
-    <div class="modal-card api-settings-card">
+    <div class="modal-card api-settings-card glass-modal">
       <div class="modal-header">
         <div style="display: flex; align-items: center; gap: 10px;">
           <span style="font-size: 22px;">🐘</span>
           <div>
-            <h3 style="margin: 0; font-size: 16px;">Backend & PostgreSQL Connection</h3>
-            <small style="color: var(--text-dim);">Production Database & API Engine</small>
+            <h3 style="margin: 0; font-size: 16px;">Backend & PostgreSQL</h3>
+            <small style="color: rgba(255,255,255,0.5);">Production Database & API</small>
           </div>
         </div>
         <button class="close-btn" onclick="closeApiSettings()">&times;</button>
       </div>
       <div class="modal-body" style="padding-top: 14px;">
-        <div class="form-group" style="margin-bottom: 14px;">
-          <label style="display: block; font-size: 12px; font-weight: 700; color: var(--text-main); margin-bottom: 6px;">
-            Render Backend API URL:
-          </label>
+        <div style="margin-bottom: 14px;">
+          <label style="display: block; font-size: 12px; font-weight: 700; margin-bottom: 6px;">Render Backend API URL:</label>
           <div style="display: flex; gap: 8px;">
-            <input type="text" id="backend-url-input" placeholder="https://aura-music-api.onrender.com" style="flex: 1; padding: 10px 14px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); color: #fff; font-family: var(--font-mono); font-size: 13px;">
-            <button class="btn-primary" style="padding: 0 16px; font-size: 12px;" onclick="saveApiSettings()">Save</button>
+            <input type="text" id="backend-url-input" placeholder="https://aura-music-api.onrender.com" style="flex: 1; padding: 10px 14px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; color: #fff; font-family: var(--font-mono); font-size: 13px;">
+            <button class="pay-btn" style="width: auto; padding: 0 16px; font-size: 12px;" onclick="saveApiSettings()">Save</button>
           </div>
-          <small style="display: block; margin-top: 6px; color: var(--text-muted); font-size: 11px;">
-            Enter your deployed Render service URL or leave blank for default cloud API.
-          </small>
         </div>
-
-        <!-- Database Health Box -->
-        <div class="db-status-card" style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 14px; margin-bottom: 16px;">
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 14px; margin-bottom: 16px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-            <span style="font-size: 12px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Database Connection</span>
+            <span style="font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.5); text-transform: uppercase;">Database Connection</span>
             <div id="db-type-display"><span class="badge-pg">🐘 PostgreSQL</span></div>
           </div>
-          <div id="db-status-display" style="font-size: 13px; margin-bottom: 8px; color: #fff;">
-            Checking connection...
-          </div>
+          <div id="db-status-display" style="font-size: 13px; margin-bottom: 8px; color: #fff;">Checking...</div>
           <div style="display: flex; gap: 10px; margin-top: 10px;">
-            <button class="btn-secondary" id="btn-test-db" style="padding: 6px 14px; font-size: 11px;" onclick="testBackendConnection()">
-              🔄 Test Connection
-            </button>
-            <button class="btn-secondary" style="padding: 6px 14px; font-size: 11px;" onclick="document.getElementById('backend-url-input').value = 'https://aura-music-api.onrender.com'; saveApiSettings();">
-              Render Default
-            </button>
+            <button class="offline-btn offline-btn-secondary" id="btn-test-db" onclick="testBackendConnection()">🔄 Test Connection</button>
+            <button class="offline-btn offline-btn-secondary" onclick="document.getElementById('backend-url-input').value = 'https://aura-music-api.onrender.com'; saveApiSettings();">Render Default</button>
           </div>
-        </div>
-
-        <!-- PostgreSQL Quick Connect Info -->
-        <div style="font-size: 12px; color: var(--text-dim); line-height: 1.5; background: rgba(139, 92, 246, 0.08); border: 1px solid rgba(139, 92, 246, 0.25); border-radius: 10px; padding: 12px;">
-          <strong style="color: #c4b5fd; display: block; margin-bottom: 4px;">Connecting Your PostgreSQL:</strong>
-          <span>In Render Dashboard &rarr; <code>aura-music-api</code> &rarr; <strong>Environment</strong>, verify <code>DATABASE_URL</code> is set. Render automatically connects to <code>aura-music-db</code>, creating and seeding all catalog tables automatically.</span>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Audio Element -->
-  <audio id="audio-engine" preload="auto" crossorigin="anonymous"></audio>
-
-  <!-- iOS Add to Home Screen Guided Modal -->
+  <!-- iOS Add to Home Screen Modal -->
   <div class="modal-overlay" id="ios-pwa-modal" style="display: none;">
-    <div class="modal-card ios-pwa-card">
+    <div class="modal-card ios-pwa-card glass-modal">
       <div class="modal-header">
         <div style="display: flex; align-items: center; gap: 10px;">
           <img src="apple-touch-icon.png" alt="Aura Logo" style="width: 32px; height: 32px; border-radius: 8px;">
-          <h3 style="margin: 0; font-size: 16px;">Add to Phone Home Screen</h3>
+          <h3 style="margin: 0; font-size: 16px;">Add to Home Screen</h3>
         </div>
         <button class="close-btn" onclick="closeIosPwaModal()">&times;</button>
       </div>
       <div class="modal-body" style="padding-top: 12px;">
-        <p style="font-size: 13px; color: var(--text-dim); margin-bottom: 16px; line-height: 1.5;">
-          Install Aura Music on your phone to open instantly and play downloaded songs with <strong>100% zero internet</strong>!
-        </p>
+        <p style="font-size: 13px; color: rgba(255,255,255,0.6); margin-bottom: 16px; line-height: 1.5;">Install Aura Music on your phone for instant offline playback!</p>
         <div class="ios-install-steps">
           <div class="ios-step-item">
             <div class="step-badge">1</div>
             <div>
               <strong>Tap the Share Button</strong>
-              <p>At the bottom or top of Safari, tap the <span class="share-icon-inline">⎋</span> Share icon.</p>
+              <p>At the bottom of Safari, tap the ⎋ Share icon.</p>
             </div>
           </div>
           <div class="ios-step-item">
             <div class="step-badge">2</div>
             <div>
               <strong>Select "Add to Home Screen"</strong>
-              <p>Scroll down the options list and tap <strong>"Add to Home Screen ⊞"</strong>.</p>
+              <p>Scroll down and tap <strong>"Add to Home Screen ⊞"</strong>.</p>
             </div>
           </div>
           <div class="ios-step-item">
             <div class="step-badge">3</div>
             <div>
               <strong>Launch & Listen Offline</strong>
-              <p>Open Aura Music right from your Home Screen. It works without internet like a native app!</p>
+              <p>Open from your Home Screen — works like a native app!</p>
             </div>
           </div>
         </div>
@@ -668,6 +743,214 @@
     </div>
   </div>
 
-  <script src="app.js?v=2.0"></script>
+  <!-- PWA Install Button (floating) -->
+  <button id="pwa-install-btn" class="pwa-install-fab" style="display: none;" onclick="triggerPwaInstall()" title="Install Aura Music App">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+  </button>
+
+  <!-- Audio Element -->
+  <audio id="audio-engine" preload="auto" crossorigin="anonymous"></audio>
+
+  <script src="app.js?v=3.0"></script>
+  <script>
+    // Bridge: sync now-playing modal with player state
+    function openNowPlayingModal() {
+      const modal = document.getElementById('now-playing-modal');
+      modal.classList.add('open');
+      syncNowPlayingModal();
+    }
+    function closeNowPlayingModal() {
+      document.getElementById('now-playing-modal').classList.remove('open');
+    }
+
+    function toggleDiscoveryDrawer() {
+      const el = document.getElementById('variance-collapsible');
+      if (el) {
+        el.style.display = el.style.display === 'none' ? 'block' : 'none';
+      }
+    }
+
+    function openReconciliationModal() {
+      const modal = document.getElementById('reconcile-modal');
+      if (modal) modal.style.display = 'flex';
+      if (typeof updateReconcileTable === 'function') updateReconcileTable();
+      if (typeof updateDownloadsCacheTable === 'function') updateDownloadsCacheTable();
+    }
+    function closeReconciliationModal() {
+      const modal = document.getElementById('reconcile-modal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    function toggleRepeatMode() {
+      const audio = document.getElementById('audio-engine');
+      if (!audio) return;
+      audio.loop = !audio.loop;
+      const btn = document.getElementById('btn-repeat-toggle');
+      if (btn) {
+        btn.classList.toggle('active', audio.loop);
+      }
+    }
+
+    function syncNowPlayingModal() {
+      const npmTitle = document.getElementById('npm-title');
+      const npmArtist = document.getElementById('npm-artist');
+      const npmBackdrop = document.getElementById('npm-art-backdrop');
+      const npmHonesty = document.getElementById('current-honesty-pill');
+      
+      if (typeof currentTrack !== 'undefined' && currentTrack) {
+        if (npmTitle) npmTitle.innerText = currentTrack.title;
+        if (npmArtist) npmArtist.innerText = currentTrack.artist_name;
+        if (npmBackdrop) {
+          const cover = currentTrack.cover_art_url || 'now_playing_art.jpg';
+          npmBackdrop.style.backgroundImage = `url('${cover}')`;
+        }
+        if (npmHonesty) {
+          const badgeText = document.getElementById('current-badge-text');
+          if (badgeText) {
+            badgeText.innerText = currentTrack.id && currentTrack.id.startsWith('yt_')
+              ? 'YouTube Direct Audio Stream'
+              : `${currentTrack.bit_depth || 24}-bit / ${(currentTrack.sample_rate || 96000)/1000} kHz FLAC HI-RES`;
+          }
+        }
+      }
+
+      // Sync play/pause in portal button
+      const playIcon = document.querySelector('.portal-play-icon');
+      const pauseIcon = document.querySelector('.portal-pause-icon');
+      if (playIcon && pauseIcon) {
+        playIcon.style.display = isPlaying ? 'none' : 'block';
+        pauseIcon.style.display = isPlaying ? 'block' : 'none';
+      }
+
+      // Sync heart button
+      const heartBtn = document.getElementById('npm-heart-btn');
+      if (heartBtn && typeof currentTrack !== 'undefined' && currentTrack) {
+        const isFav = userFavorites && (userFavorites.has(currentTrack.id) || userFavorites.has(currentTrack.artist_id));
+        heartBtn.classList.toggle('favorited', !!isFav);
+      }
+    }
+
+    // Interactive seeking on the Curved Arc
+    function handleArcSeek(e) {
+      const svg = document.getElementById('curved-arc-svg');
+      const audio = document.getElementById('audio-engine');
+      if (!svg || !audio) return;
+      const rect = svg.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const ratio = Math.max(0, Math.min(1, clickX / rect.width));
+      const effectiveDuration = (typeof snippetDuration !== 'undefined' && snippetDuration > 0) 
+        ? snippetDuration 
+        : (audio.duration || (typeof currentTrack !== 'undefined' && currentTrack ? currentTrack.duration_seconds : 248) || 248);
+      audio.currentTime = ratio * effectiveDuration;
+    }
+
+    // Override the original loadCurrentTrack to also sync modal
+    const _origLoad = loadCurrentTrack;
+    loadCurrentTrack = function(track) {
+      _origLoad(track);
+      syncNowPlayingModal();
+      const displayEl = document.getElementById('support-artist-name-display');
+      if (displayEl) displayEl.innerText = track.artist_name;
+    };
+
+    // Override togglePlayPause to sync modal icons
+    const _origToggle = togglePlayPause;
+    togglePlayPause = function() {
+      _origToggle();
+      setTimeout(syncNowPlayingModal, 50);
+    };
+
+    // Update curved arc scrubber on timeupdate
+    const _origAudioEngine = document.getElementById('audio-engine');
+    _origAudioEngine.addEventListener('timeupdate', () => {
+      const effectiveDuration = (typeof snippetDuration !== 'undefined' && snippetDuration > 0) 
+        ? snippetDuration 
+        : (_origAudioEngine.duration || (typeof currentTrack !== 'undefined' && currentTrack ? currentTrack.duration_seconds : 1) || 1);
+      const progress = Math.max(0, Math.min(1, _origAudioEngine.currentTime / effectiveDuration));
+      
+      // Update SVG curved arc progress
+      const arcBg = document.getElementById('arc-bg-path');
+      const arcProgress = document.getElementById('arc-progress-path');
+      const arcDot = document.getElementById('arc-scrubber-dot');
+      if (arcBg && arcProgress && arcDot) {
+        const totalLen = arcBg.getTotalLength();
+        arcProgress.style.strokeDasharray = totalLen;
+        arcProgress.style.strokeDashoffset = totalLen * (1 - progress);
+        const pt = arcBg.getPointAtLength(progress * totalLen);
+        arcDot.setAttribute('cx', pt.x);
+        arcDot.setAttribute('cy', pt.y);
+      }
+
+      // Update time labels
+      const curTimeLabel = document.getElementById('current-time-label');
+      if (curTimeLabel && typeof formatTime === 'function') {
+        curTimeLabel.innerText = formatTime(_origAudioEngine.currentTime);
+      }
+      const totalTimeLabel = document.getElementById('total-time-label');
+      if (totalTimeLabel && typeof formatTime === 'function') {
+        totalTimeLabel.innerText = formatTime(effectiveDuration);
+      }
+    });
+
+    // Category filter function
+    function filterCategory(cat, btn) {
+      document.querySelectorAll('.category-pill').forEach(p => p.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+      if (typeof reRankRecommendations === 'function') reRankRecommendations();
+    }
+
+    // Populate Library tab playlists matching Screen 2
+    function renderLibraryPlaylists() {
+      const container = document.getElementById('library-track-list');
+      if (!container) return;
+      const tracksToDisplay = (typeof CATALOG_TRACKS !== 'undefined' && CATALOG_TRACKS.length) ? CATALOG_TRACKS : [];
+      container.innerHTML = '';
+      tracksToDisplay.forEach((track, idx) => {
+        const row = document.createElement('div');
+        row.className = 'track-card';
+        row.onclick = () => selectTrack(idx);
+        row.innerHTML = `
+          <img src="${track.cover_art_url}" class="track-art" alt="${track.title}">
+          <div class="track-details">
+            <div class="track-title-row">
+              <strong>${track.title}</strong>
+            </div>
+            <div class="track-meta-row">
+              <span>By ${track.artist_name} &bull; ${track.album_title || '8 songs'}</span>
+            </div>
+          </div>
+          <div class="track-actions">
+            <button class="track-play-btn" title="Play" aria-label="Play ${track.title}">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>
+            </button>
+          </div>
+        `;
+        container.appendChild(row);
+      });
+    }
+
+    // Override switchTab to work with bottom nav and library rendering
+    const _origSwitchTab = switchTab;
+    switchTab = function(tab) {
+      document.querySelectorAll('.bottom-nav-item').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.view-panel').forEach(el => el.classList.remove('active'));
+      
+      if (tab === 'home') {
+        document.getElementById('tab-for-you').classList.add('active');
+        document.getElementById('view-home').classList.add('active');
+      } else if (tab === 'reconciliation') {
+        document.getElementById('tab-reconciliation').classList.add('active');
+        document.getElementById('view-reconciliation').classList.add('active');
+        renderLibraryPlaylists();
+      } else if (tab === 'offline') {
+        document.getElementById('tab-offline').classList.add('active');
+        document.getElementById('view-offline').classList.add('active');
+        if (typeof renderOfflineVault === 'function') renderOfflineVault();
+      } else if (tab === 'royalties') {
+        document.getElementById('tab-royalties').classList.add('active');
+        document.getElementById('view-royalties').classList.add('active');
+      }
+    };
+  </script>
 </body>
 </html>

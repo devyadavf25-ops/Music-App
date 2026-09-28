@@ -4,6 +4,7 @@ hybrid library reconciliation, and user-centric royalty endpoints.
 """
 
 import asyncio
+import httpx
 import logging
 import os
 import re
@@ -36,6 +37,49 @@ from ...db.models import (
 
 api_router = APIRouter(prefix="/v1")
 logger = logging.getLogger(__name__)
+
+
+async def _proxy_audio_stream(source_url: str, request: Request) -> StreamingResponse:
+    client = httpx.AsyncClient(
+        follow_redirects=True,
+        timeout=httpx.Timeout(10.0, read=None)
+    )
+    request_headers = {"Accept-Encoding": "identity"}
+    if range_header := request.headers.get("range"):
+        request_headers["Range"] = range_header
+
+    try:
+        upstream_request = client.build_request("GET", source_url, headers=request_headers)
+        upstream = await client.send(upstream_request, stream=True)
+    except httpx.HTTPError as exc:
+        await client.aclose()
+        logger.warning("Audio source request failed for %s: %s", source_url, exc)
+        raise HTTPException(status_code=502, detail="Audio source unavailable") from None
+
+    if upstream.status_code not in (200, 206):
+        await upstream.aclose()
+        await client.aclose()
+        raise HTTPException(status_code=502, detail="Audio source unavailable")
+
+    response_headers = {"Accept-Ranges": upstream.headers.get("accept-ranges", "bytes")}
+    for name in ("content-range", "content-length"):
+        if value := upstream.headers.get(name):
+            response_headers[name.title()] = value
+
+    async def stream_body():
+        try:
+            async for chunk in upstream.aiter_bytes():
+                yield chunk
+        finally:
+            await upstream.aclose()
+            await client.aclose()
+
+    return StreamingResponse(
+        stream_body(),
+        status_code=upstream.status_code,
+        media_type=upstream.headers.get("content-type", "audio/mpeg"),
+        headers=response_headers
+    )
 
 
 class RecommendationRequest(BaseModel):
@@ -496,6 +540,7 @@ async def download_youtube_file(video_id: str):
 @api_router.get("/catalog/audio/{track_id}")
 async def stream_catalog_audio(
     track_id: str,
+    request: Request,
     title: Optional[str] = Query(None),
     artist: Optional[str] = Query(None)
 ):
@@ -503,8 +548,6 @@ async def stream_catalog_audio(
     Provides a browser & mobile compatible audio stream with Range support for catalog,
     iTunes, or YouTube items. Automatically resolves full-length song for searched tracks.
     """
-    import httpx
-
     # 1. If YouTube track passed to catalog endpoint
     if track_id.startswith("yt_"):
         video_id = track_id.replace("yt_", "")
@@ -540,7 +583,7 @@ async def stream_catalog_audio(
     # Check standard local catalog
     track = CatalogService.get_track_by_id(track_id)
     if track and track.stream_url and track.stream_url.startswith("http"):
-        return RedirectResponse(url=track.stream_url, status_code=307)
+        return await _proxy_audio_stream(track.stream_url, request)
 
     raise HTTPException(status_code=404, detail="Audio stream unavailable")
 

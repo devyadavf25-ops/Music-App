@@ -267,6 +267,13 @@ const CATALOG_TRACKS = [
   }
 ];
 
+CATALOG_TRACKS.forEach((track, index) => {
+  const streamTrackId = track.id.startsWith("trk_ref_")
+    ? `trk_${String(index + 1).padStart(3, "0")}`
+    : track.id;
+  track.stream_url = `${API_BASE}/catalog/audio/${streamTrackId}`;
+});
+
 // App State
 let activeTracks = [...CATALOG_TRACKS];
 let currentTrackIndex = 0;
@@ -962,8 +969,10 @@ function loadCurrentTrack(track) {
         audio.src = `${API_BASE}/catalog/audio/${track.id}?title=${encodeURIComponent(track.title)}&artist=${encodeURIComponent(track.artist_name || "")}`;
         resolveFullTrackForItunes(track);
       }
-    } else if (track.stream_url && track.stream_url.startsWith("http")) {
+    } else if (track.stream_url && track.stream_url.startsWith(`${API_BASE}/catalog/audio/`)) {
       audio.src = track.stream_url;
+    } else if (track.stream_url && track.stream_url.startsWith("http")) {
+      audio.src = `${API_BASE}/catalog/audio/${encodeURIComponent(track.id)}`;
     } else {
       audio.src = `${API_BASE}/catalog/audio/${track.id}?title=${encodeURIComponent(track.title)}&artist=${encodeURIComponent(track.artist_name || "")}`;
     }

@@ -572,12 +572,17 @@ async def stream_catalog_audio(
 
         if track_id.startswith("itunes_"):
             raise HTTPException(status_code=404, detail="Full-length audio stream unavailable")
-        if reg_track and reg_track.stream_url and reg_track.stream_url.startswith("http"):
-            return RedirectResponse(url=reg_track.stream_url, status_code=307)
+        if reg_track and reg_track.stream_url:
+            if reg_track.stream_url.startswith("http"):
+                return await _proxy_audio_stream(reg_track.stream_url, request)
+            if reg_track.stream_url.startswith("/"):
+                return RedirectResponse(url=reg_track.stream_url, status_code=307)
 
     reg_track = YouTubeService.get_registered_track(track_id)
     if reg_track and reg_track.stream_url:
-        if reg_track.stream_url.startswith("http") or reg_track.stream_url.startswith("/"):
+        if reg_track.stream_url.startswith("http"):
+            return await _proxy_audio_stream(reg_track.stream_url, request)
+        if reg_track.stream_url.startswith("/"):
             return RedirectResponse(url=reg_track.stream_url, status_code=307)
 
     # Check standard local catalog

@@ -1,4 +1,5 @@
 import pytest
+from types import SimpleNamespace
 from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock
 
@@ -69,6 +70,23 @@ def test_catalog_audio_proxies_range_requests(monkeypatch):
     assert response.content == b"test"
     assert response.headers["content-range"] == "bytes 0-3/10"
     assert captured["headers"]["Range"] == "bytes=0-3"
+
+
+def test_registered_audio_uses_proxy_not_redirect(monkeypatch):
+    proxy = AsyncMock(return_value=router_module.Response(content=b"test", media_type="audio/mpeg"))
+    monkeypatch.setattr(
+        YouTubeService,
+        "get_registered_track",
+        lambda *_: SimpleNamespace(stream_url="https://example.com/registered.mp3")
+    )
+    monkeypatch.setattr(router_module, "_proxy_audio_stream", proxy)
+
+    with TestClient(app) as client:
+        response = client.get("/api/v1/catalog/audio/registered_track")
+
+    assert response.status_code == 200
+    assert response.content == b"test"
+    proxy.assert_awaited_once()
 
 
 @pytest.mark.asyncio

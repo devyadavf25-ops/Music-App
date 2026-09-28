@@ -11,11 +11,20 @@
 // Environment-aware API URL detection (Localhost vs Deployed Cloud)
 const API_BASE = (() => {
   if (typeof window !== "undefined") {
+    const updateLegacyUrl = url => url.replace(
+      "https://aura-music-api.onrender.com",
+      "https://aura-music-api-07b8.onrender.com"
+    );
+
     // 1. Check runtime override (window or localStorage)
-    if (window.AURA_API_URL) return window.AURA_API_URL;
+    if (window.AURA_API_URL) return updateLegacyUrl(window.AURA_API_URL);
     try {
       const stored = localStorage.getItem("AURA_API_URL");
-      if (stored) return stored;
+      if (stored) {
+        const updated = updateLegacyUrl(stored);
+        if (updated !== stored) localStorage.setItem("AURA_API_URL", updated);
+        return updated;
+      }
     } catch (_) {}
 
     // 2. When running through dev-server on port 3000, use relative path so transparent proxy handles it
@@ -30,7 +39,7 @@ const API_BASE = (() => {
     }
   }
   // 4. Deployed production Render backend
-  return "https://aura-music-api.onrender.com/api/v1";
+  return "https://aura-music-api-07b8.onrender.com/api/v1";
 })();
 
 

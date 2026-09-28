@@ -15,7 +15,7 @@ public actor NetworkAPIClient {
     #if DEBUG
     public static let defaultBaseURL: String = "http://127.0.0.1:8001/api/v1"
     #else
-    public static let defaultBaseURL: String = "https://aura-music-api.onrender.com/api/v1"
+    public static let defaultBaseURL: String = "https://aura-music-api-07b8.onrender.com/api/v1"
     #endif
 
     public static var baseURL: String {

@@ -682,7 +682,7 @@
         <div style="margin-bottom: 14px;">
           <label style="display: block; font-size: 12px; font-weight: 700; margin-bottom: 6px;">Render Backend API URL:</label>
           <div style="display: flex; gap: 8px;">
-            <input type="text" id="backend-url-input" placeholder="https://aura-music-api.onrender.com" style="flex: 1; padding: 10px 14px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; color: #fff; font-family: var(--font-mono); font-size: 13px;">
+            <input type="text" id="backend-url-input" placeholder="https://aura-music-api-07b8.onrender.com" style="flex: 1; padding: 10px 14px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; color: #fff; font-family: var(--font-mono); font-size: 13px;">
             <button class="pay-btn" style="width: auto; padding: 0 16px; font-size: 12px;" onclick="saveApiSettings()">Save</button>
           </div>
         </div>
@@ -694,7 +694,7 @@
           <div id="db-status-display" style="font-size: 13px; margin-bottom: 8px; color: #fff;">Checking...</div>
           <div style="display: flex; gap: 10px; margin-top: 10px;">
             <button class="offline-btn offline-btn-secondary" id="btn-test-db" onclick="testBackendConnection()">🔄 Test Connection</button>
-            <button class="offline-btn offline-btn-secondary" onclick="document.getElementById('backend-url-input').value = 'https://aura-music-api.onrender.com'; saveApiSettings();">Render Default</button>
+            <button class="offline-btn offline-btn-secondary" onclick="document.getElementById('backend-url-input').value = 'https://aura-music-api-07b8.onrender.com'; saveApiSettings();">Render Default</button>
           </div>
         </div>
       </div>
@@ -751,7 +751,7 @@
   <!-- Audio Element -->
   <audio id="audio-engine" preload="auto" crossorigin="anonymous"></audio>
 
-  <script src="app.js?v=3.1"></script>
+  <script src="app.js?v=3.2"></script>
   <script>
     // Bridge: sync now-playing modal with player state
     function openNowPlayingModal() {

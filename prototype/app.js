@@ -914,9 +914,17 @@ async function resolveFullTrackForItunes(track) {
 
 // Audio Player & Format Honesty
 let currentTrack = CATALOG_TRACKS[0];
+let previewFallbackPromise = null;
+let playbackErrorShown = false;
+let playbackRequested = false;
+let isPreviewPlayback = false;
 
 function loadCurrentTrack(track) {
   currentTrack = track;
+  previewFallbackPromise = null;
+  playbackErrorShown = false;
+  playbackRequested = false;
+  isPreviewPlayback = false;
   document.getElementById("current-title").innerText = track.title;
   document.getElementById("current-artist").innerText = track.artist_name;
   document.getElementById("current-cover").src = track.cover_art_url;
@@ -997,7 +1005,94 @@ function togglePlayPause() {
   }
 }
 
+async function tryPreviewFallback(track) {
+  if (!track || currentTrack !== track || isPreviewPlayback) return false;
+  if (previewFallbackPromise) return previewFallbackPromise;
+
+  previewFallbackPromise = (async () => {
+    let previewUrl = track._previewUrl || track.previewUrl || "";
+    if (!previewUrl) {
+      try {
+        const query = `${track.artist_name || ""} ${track.title}`.trim();
+        const response = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&limit=10`);
+        if (response.ok) {
+          const data = await response.json();
+          const results = data.results || [];
+          const normalize = value => (value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+          const title = normalize(track.title);
+          const artist = normalize(track.artist_name);
+          const matchingResult = results.find(result =>
+            result.previewUrl && normalize(result.trackName) === title &&
+            (!artist || normalize(result.artistName).includes(artist))
+          );
+          previewUrl = (matchingResult || results.find(result => result.previewUrl) || {}).previewUrl || "";
+        }
+      } catch (error) {
+        console.warn("Could not find an iTunes preview:", error);
+      }
+    }
+
+    if (!previewUrl || currentTrack !== track) return false;
+
+    track._previewUrl = previewUrl;
+    isPreviewPlayback = true;
+    audio.pause();
+    audio.src = previewUrl;
+    audio.load();
+    const badge = document.getElementById("current-badge-text");
+    if (badge) badge.innerText = "iTunes Preview";
+
+    try {
+      await audio.play();
+      if (currentTrack !== track) return false;
+      isPlaying = true;
+      document.getElementById("icon-play").style.display = "none";
+      document.getElementById("icon-pause").style.display = "block";
+      previewFallbackPromise = null;
+      showToast("Playing preview", "Full playback is unavailable. Playing an iTunes preview instead.", "▶");
+      return true;
+    } catch (error) {
+      if (error.name === "NotAllowedError" && currentTrack === track) {
+        playbackRequested = false;
+        previewFallbackPromise = null;
+        isPlaying = false;
+        document.getElementById("icon-play").style.display = "block";
+        document.getElementById("icon-pause").style.display = "none";
+        showToast("Preview ready", "Tap play again to start the iTunes preview.", "▶");
+        return true;
+      }
+      isPreviewPlayback = false;
+      return false;
+    }
+  })();
+
+  return previewFallbackPromise;
+}
+
+async function handlePlaybackFailure() {
+  const track = currentTrack;
+  if (!track || !playbackRequested || playbackErrorShown) return;
+
+  const needsBackend = /^(itunes_|yt_)/.test(track.id);
+  if (needsBackend && await tryPreviewFallback(track)) return;
+  if (track !== currentTrack || playbackErrorShown) return;
+
+  playbackRequested = false;
+  playbackErrorShown = true;
+  isPlaying = false;
+  document.getElementById("icon-play").style.display = "block";
+  document.getElementById("icon-pause").style.display = "none";
+  const badge = document.getElementById("current-badge-text");
+  if (badge) badge.innerText = needsBackend ? "Full Audio Stream Unavailable" : "Audio Source Unavailable";
+  showToast(
+    needsBackend ? "Playback unavailable" : "Playback unavailable",
+    needsBackend ? "The full stream failed and no preview could be played." : "The audio source could not be played.",
+    "⚠️"
+  );
+}
+
 function playAudio() {
+  playbackRequested = true;
   initAudioContext();
   audio.play().then(() => {
     isPlaying = true;
@@ -1006,22 +1101,13 @@ function playAudio() {
     recentPlayed.add(currentTrack.id);
   }).catch(e => {
     console.warn("Audio play failed:", e);
-    isPlaying = false;
-    document.getElementById("icon-play").style.display = "block";
-    document.getElementById("icon-pause").style.display = "none";
-    const badge = document.getElementById("current-badge-text");
-    const needsBackend = currentTrack && /^(itunes_|yt_)/.test(currentTrack.id);
-    if (badge) badge.innerText = needsBackend ? "Full Audio Stream Unavailable" : "Audio Source Unavailable";
-    showToast(
-      needsBackend ? "Full playback unavailable" : "Playback unavailable",
-      needsBackend ? "The full audio backend could not provide this track. No short preview was started." : "The audio source could not be played.",
-      "⚠️"
-    );
+    void handlePlaybackFailure();
   });
 }
 
 function pauseAudio() {
   audio.pause();
+  playbackRequested = false;
   isPlaying = false;
   document.getElementById("icon-play").style.display = "block";
   document.getElementById("icon-pause").style.display = "none";
@@ -1067,7 +1153,10 @@ audio.addEventListener("loadedmetadata", () => {
   if (snippetDuration === 0 && audio.duration) {
     document.getElementById("total-time-label").innerText = formatTime(Math.floor(audio.duration));
   }
-  if (currentTrack && /^(itunes_|yt_)/.test(currentTrack.id)) {
+  if (isPreviewPlayback) {
+    const badge = document.getElementById("current-badge-text");
+    if (badge) badge.innerText = `iTunes Preview · ${formatTime(Math.floor(audio.duration))}`;
+  } else if (currentTrack && /^(itunes_|yt_)/.test(currentTrack.id)) {
     const badge = document.getElementById("current-badge-text");
     if (badge) badge.innerText = `Full Audio Stream · ${formatTime(Math.floor(audio.duration))}`;
   }
@@ -1075,6 +1164,10 @@ audio.addEventListener("loadedmetadata", () => {
 
 audio.addEventListener("ended", () => {
   nextTrack();
+});
+
+audio.addEventListener("error", () => {
+  if (playbackRequested) void handlePlaybackFailure();
 });
 
 function handleSeek(e) {

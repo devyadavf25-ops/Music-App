@@ -20,7 +20,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Aura Music">
   
-  <link rel="stylesheet" href="styles.css?v=3.4">
+  <link rel="stylesheet" href="styles.css?v=3.5">
 </head>
 <body>
   <!-- Animated Background -->
@@ -310,7 +310,7 @@
         <div class="feature-hero">
           <span class="section-tag" style="color: #34d399; border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.1);">ZERO DATA REQUIRED</span>
           <h1>Offline Music Vault</h1>
-          <p>Download your favorite music directly to your device. Play with zero internet.</p>
+          <p>Import audio you own or have permission to store. Play offline and in the background.</p>
         </div>
 
         <div class="offline-stats-grid">
@@ -374,8 +374,8 @@
           <div id="offline-empty-state" style="display: none; padding: 40px 20px; text-align: center; color: rgba(255,255,255,0.5);">
             <div style="font-size: 36px; margin-bottom: 12px;">📥</div>
             <h4 style="color: #fff; margin-bottom: 6px;">Your Offline Vault is Empty</h4>
-            <p style="font-size: 13px; max-width: 420px; margin: 0 auto 16px auto;">Search any track and click Download to listen offline.</p>
-            <button class="offline-btn offline-btn-primary" onclick="downloadRecommendedBatch()">Download Top 3 Tracks Now</button>
+            <p style="font-size: 13px; max-width: 420px; margin: 0 auto 16px auto;">Import audio files you own or have permission to store for offline playback.</p>
+            <button class="offline-btn offline-btn-primary" onclick="document.getElementById('file-picker-hidden').click()">Import Audio Files</button>
           </div>
         </div>
       </section>
@@ -759,7 +759,7 @@
   <!-- Audio Element -->
   <audio id="audio-engine" preload="auto" crossorigin="anonymous"></audio>
 
-  <script src="app.js?v=3.4"></script>
+  <script src="app.js?v=3.5"></script>
   <script>
     // Bridge: sync now-playing modal with player state
     function openNowPlayingModal() {

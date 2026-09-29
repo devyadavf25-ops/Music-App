@@ -286,6 +286,7 @@ let tipAmount = 2;
 let searchSource = "all";
 let searchDebounceTimer = null;
 let offlineDownloads = [];
+const offlineObjectUrls = new WeakMap();
 const downloadStates = Object.create(null);
 const OFFLINE_DB_NAME = "aura-music-offline";
 const OFFLINE_STORE_NAME = "tracks";
@@ -997,6 +998,7 @@ function handleYouTubePlayerState(event) {
   if (event.data === 1) {
     isPlaying = true;
     playbackRequested = true;
+    updateMediaSessionPlaybackState("playing");
     document.getElementById("icon-play").style.display = "none";
     document.getElementById("icon-pause").style.display = "block";
     if (!youtubeProgressTimer) youtubeProgressTimer = setInterval(updateYouTubeProgress, 500);
@@ -1004,6 +1006,7 @@ function handleYouTubePlayerState(event) {
   } else if (event.data === 2) {
     isPlaying = false;
     playbackRequested = false;
+    updateMediaSessionPlaybackState("paused");
     document.getElementById("icon-play").style.display = "block";
     document.getElementById("icon-pause").style.display = "none";
     clearInterval(youtubeProgressTimer);
@@ -1011,6 +1014,7 @@ function handleYouTubePlayerState(event) {
     if (typeof syncNowPlayingModal === "function") syncNowPlayingModal();
   } else if (event.data === 0) {
     isPlaying = false;
+    updateMediaSessionPlaybackState("none");
     clearInterval(youtubeProgressTimer);
     youtubeProgressTimer = null;
     if (audio.loop) {
@@ -1037,6 +1041,7 @@ function updateYouTubeProgress() {
 
   document.getElementById("current-time-label").innerText = formatTime(Math.floor(currentTime));
   document.getElementById("total-time-label").innerText = formatTime(Math.floor(duration));
+  updateMediaSessionPosition(currentTime, duration);
   const progress = Math.min(1, currentTime / duration);
   document.getElementById("progress-fill").style.width = `${progress * 100}%`;
 
@@ -1214,6 +1219,8 @@ async function tryPreviewFallback(track) {
       await audio.play();
       if (currentTrack !== track) return false;
       isPlaying = true;
+      updateMediaSessionPlaybackState("playing");
+      updateMediaSessionPosition(audio.currentTime, audio.duration);
       document.getElementById("icon-play").style.display = "none";
       document.getElementById("icon-pause").style.display = "block";
       previewFallbackPromise = null;
@@ -1224,6 +1231,7 @@ async function tryPreviewFallback(track) {
         playbackRequested = false;
         previewFallbackPromise = null;
         isPlaying = false;
+        updateMediaSessionPlaybackState("paused");
         document.getElementById("icon-play").style.display = "block";
         document.getElementById("icon-pause").style.display = "none";
         showToast("Preview ready", "Tap play again to start the iTunes preview.", "▶");
@@ -1248,6 +1256,7 @@ async function handlePlaybackFailure() {
   playbackRequested = false;
   playbackErrorShown = true;
   isPlaying = false;
+  updateMediaSessionPlaybackState("paused");
   document.getElementById("icon-play").style.display = "block";
   document.getElementById("icon-pause").style.display = "none";
   const badge = document.getElementById("current-badge-text");
@@ -1275,6 +1284,8 @@ function playAudio() {
   initAudioContext();
   audio.play().then(() => {
     isPlaying = true;
+    updateMediaSessionPlaybackState("playing");
+    updateMediaSessionPosition(audio.currentTime, audio.duration);
     document.getElementById("icon-play").style.display = "none";
     document.getElementById("icon-pause").style.display = "block";
     recentPlayed.add(currentTrack.id);
@@ -1289,6 +1300,7 @@ function pauseAudio() {
     playbackRequested = false;
     if (youtubePlayerReady) youtubePlayer.pauseVideo();
     isPlaying = false;
+    updateMediaSessionPlaybackState("paused");
     document.getElementById("icon-play").style.display = "block";
     document.getElementById("icon-pause").style.display = "none";
     return;
@@ -1296,17 +1308,20 @@ function pauseAudio() {
   audio.pause();
   playbackRequested = false;
   isPlaying = false;
+  updateMediaSessionPlaybackState("paused");
   document.getElementById("icon-play").style.display = "block";
   document.getElementById("icon-pause").style.display = "none";
 }
 
 function nextTrack() {
+  if (activeTracks.length === 0) return;
   isAutoAdvancing = false;
   currentTrackIndex = (currentTrackIndex + 1) % activeTracks.length;
   selectTrack(currentTrackIndex);
 }
 
 function prevTrack() {
+  if (activeTracks.length === 0) return;
   isAutoAdvancing = false;
   currentTrackIndex = (currentTrackIndex - 1 + activeTracks.length) % activeTracks.length;
   selectTrack(currentTrackIndex);
@@ -1316,6 +1331,7 @@ function prevTrack() {
 let isAutoAdvancing = false;
 
 audio.addEventListener("timeupdate", () => {
+  updateMediaSessionPosition(audio.currentTime, audio.duration);
   const effectiveDuration = (snippetDuration > 0) ? snippetDuration : (audio.duration || currentTrack.duration_seconds || 1);
 
   // Mobile / Snippet Mode limit (play only 15s or 30s)
@@ -1337,6 +1353,7 @@ audio.addEventListener("timeupdate", () => {
 });
 
 audio.addEventListener("loadedmetadata", () => {
+  updateMediaSessionPosition(audio.currentTime, audio.duration);
   if (snippetDuration === 0 && audio.duration) {
     document.getElementById("total-time-label").innerText = formatTime(Math.floor(audio.duration));
   }
@@ -1350,11 +1367,16 @@ audio.addEventListener("loadedmetadata", () => {
 });
 
 audio.addEventListener("ended", () => {
+  updateMediaSessionPlaybackState("none");
   nextTrack();
 });
 
 audio.addEventListener("error", () => {
   if (playbackRequested && !isYouTubeEmbedActive) void handlePlaybackFailure();
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden && isYouTubeEmbedActive) pauseAudio();
 });
 
 function handleSeek(e) {
@@ -1679,6 +1701,31 @@ function renderOfflineDownloads() {
   updateCurrentDownloadButton();
 }
 
+function createOfflineTrack(item) {
+  let offlineUrl = offlineObjectUrls.get(item.blob);
+  if (!offlineUrl) {
+    offlineUrl = URL.createObjectURL(item.blob);
+    offlineObjectUrls.set(item.blob, offlineUrl);
+  }
+
+  const catalogTrack = CATALOG_TRACKS.find(track => track.id === item.id);
+  return {
+    ...catalogTrack,
+    id: item.id,
+    title: item.title,
+    artist_name: item.artist_name,
+    album_title: item.album_title || catalogTrack?.album_title || "Offline Vault",
+    duration_seconds: item.duration_seconds || catalogTrack?.duration_seconds || 240,
+    cover_art_url: item.cover_art_url || catalogTrack?.cover_art_url || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80",
+    stream_url: offlineUrl,
+    offlineUrl,
+    audio_format: item.format || catalogTrack?.audio_format || "audio/mp4",
+    sample_rate: catalogTrack?.sample_rate || 48000,
+    bit_depth: catalogTrack?.bit_depth || 16,
+    lyrics: item.lyrics || "Saved audio file — offline playback."
+  };
+}
+
 function playDownloadedTrack(idx) {
   const item = offlineDownloads[idx];
   if (!item || !item.blob) {
@@ -1686,22 +1733,11 @@ function playDownloadedTrack(idx) {
     return;
   }
 
-  const offlineURL = URL.createObjectURL(item.blob);
+  activeTracks = offlineDownloads.filter(saved => saved.blob).map(createOfflineTrack);
+  currentTrackIndex = activeTracks.findIndex(track => track.id === item.id);
+  if (currentTrackIndex < 0) return;
   showToast("Offline Playback", `Playing "${item.title}" from local storage (Zero network usage)`, "🎵");
-  const track = CATALOG_TRACKS.find(t => t.id === item.id) || {
-    id: item.id,
-    title: item.title,
-    artist_name: item.artist_name,
-    album_title: "Downloaded Offline",
-    duration_seconds: 240,
-    cover_art_url: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80",
-    stream_url: offlineURL,
-    audio_format: "alac_lossless",
-    sample_rate: 48000,
-    bit_depth: 16
-  };
-  track.offlineUrl = offlineURL;
-  loadCurrentTrack(track);
+  loadCurrentTrack(activeTracks[currentTrackIndex]);
   playAudio();
 }
 
@@ -1829,29 +1865,15 @@ function toggleOfflineMode(enabled) {
     showToast("Offline Mode", "All playback will use downloaded audio (zero network).", "✈️");
     // Switch to offline vault view and show only offline tracks in the queue
     switchTab("offline");
-    activeTracks = offlineDownloads.map(item => {
-      const offlineURL = item.blob ? URL.createObjectURL(item.blob) : null;
-      return {
-        id: item.id,
-        title: item.title,
-        artist_name: item.artist_name,
-        album_title: "Offline Vault",
-        duration_seconds: 240,
-        cover_art_url: item.cover_art_url || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80",
-        stream_url: offlineURL || "",
-        offlineUrl: offlineURL,
-        audio_format: item.format || "audio/mp4",
-        sample_rate: 48000,
-        bit_depth: 16,
-        bpm: 120,
-        musical_key: "C Major",
-        energy: 0.7,
-        valence: 0.6,
-        acousticness: 0.3,
-        popularity: 100,
-        lyrics: "Cached offline file — zero network playback."
-      };
-    });
+    activeTracks = offlineDownloads.filter(item => item.blob).map(createOfflineTrack);
+    const currentOfflineIndex = activeTracks.findIndex(track => track.id === currentTrack?.id);
+    if (currentOfflineIndex >= 0) {
+      currentTrackIndex = currentOfflineIndex;
+    } else {
+      pauseAudio();
+      currentTrackIndex = 0;
+      if (activeTracks.length > 0) loadCurrentTrack(activeTracks[0]);
+    }
     renderTracks();
   } else {
     showToast("Online Mode", "Network streaming re-enabled.", "🌐");
@@ -2102,11 +2124,31 @@ if ("serviceWorker" in navigator) {
 }
 
 // 2. Lock-Screen & Mobile Notification Audio Controls (MediaSession API)
+function updateMediaSessionPlaybackState(state) {
+  if (!("mediaSession" in navigator)) return;
+  try {
+    navigator.mediaSession.playbackState = state;
+  } catch (_) {}
+}
+
+function updateMediaSessionPosition(position, duration) {
+  const session = navigator.mediaSession;
+  if (!session || typeof session.setPositionState !== "function" || !Number.isFinite(position) || !Number.isFinite(duration) || duration <= 0) return;
+  try {
+    session.setPositionState({
+      duration,
+      position: Math.min(Math.max(position, 0), duration),
+      playbackRate: audio.playbackRate || 1
+    });
+  } catch (_) {}
+}
+
 function updateMediaSession(track) {
   if (!("mediaSession" in navigator) || !track) return;
+  updateMediaSessionPlaybackState("none");
 
   const artworkUrl = track.cover_art_url || "icon-512.png";
-  navigator.mediaSession.metadata = new MediaMetadata({
+  if (typeof MediaMetadata === "function") navigator.mediaSession.metadata = new MediaMetadata({
     title: track.title,
     artist: track.artist_name,
     album: track.album_title || "Aura Offline Vault",

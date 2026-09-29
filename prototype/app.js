@@ -302,6 +302,7 @@ let dataArray = null;
 
 // Initialize
 document.addEventListener("DOMContentLoaded", () => {
+  loadYouTubeIframeApi().catch(error => console.warn("YouTube player unavailable:", error));
   renderTracks();
   loadCurrentTrack(CATALOG_TRACKS[0]);
   setupVisualizer();
@@ -848,7 +849,8 @@ function setSnippetDuration(sec) {
 
   if (snippetDuration > 0) {
     showToast("Clip Preview Mode", `Playing ${snippetDuration}s snippet previews with auto-advance.`, "⚡");
-    if (audio.currentTime >= snippetDuration && isPlaying) {
+    const playhead = isYouTubeEmbedActive && youtubePlayerReady ? youtubePlayer.getCurrentTime() : audio.currentTime;
+    if (playhead >= snippetDuration && isPlaying) {
       nextTrack();
     }
   } else {
@@ -884,47 +886,186 @@ function updateSnippetDisplay() {
 }
 
 
-// Background resolver: replaces search clips with full-length YouTube songs
-async function resolveFullTrackForItunes(track) {
-  try {
-    const res = await fetch(`${API_BASE}/youtube/resolve?title=${encodeURIComponent(track.title)}&artist=${encodeURIComponent(track.artist_name || "")}`);
-    if (res.ok) {
-      const data = await res.json();
-      if (data.found && data.video_id) {
-        const fullUrl = `${API_BASE}/youtube/audio/${data.video_id}`;
-        track.full_stream_url = fullUrl;
-        track.duration_seconds = data.duration_seconds || track.duration_seconds;
-        track.id = `yt_${data.video_id}`;
-        
-        // If this track is currently active, update duration and badge
-        if (currentTrack && (currentTrack.title === track.title)) {
-          const totalTimeLabel = document.getElementById("total-time-label");
-          if (totalTimeLabel && snippetDuration === 0) {
-            totalTimeLabel.innerText = formatTime(track.duration_seconds);
-          }
-          document.getElementById("current-badge-text").innerText = "16-bit / 48 kHz AAC (Full Audio Stream)";
-        }
-      }
-    }
-  } catch (err) {
-    console.warn("Could not auto-resolve full track stream:", err);
-  }
-}
-
-
 // Audio Player & Format Honesty
 let currentTrack = CATALOG_TRACKS[0];
 let previewFallbackPromise = null;
 let playbackErrorShown = false;
 let playbackRequested = false;
 let isPreviewPlayback = false;
+let isYouTubeEmbedActive = false;
+let activeYouTubeVideoId = "";
+let youtubePlayerVideoId = "";
+let youtubePlayer = null;
+let youtubePlayerReady = false;
+let youtubeApiPromise = null;
+let youtubeProgressTimer = null;
+
+function loadYouTubeIframeApi() {
+  if (window.YT && window.YT.Player) return Promise.resolve(window.YT);
+  if (youtubeApiPromise) return youtubeApiPromise;
+
+  youtubeApiPromise = new Promise((resolve, reject) => {
+    window.onYouTubeIframeAPIReady = () => resolve(window.YT);
+    let script = document.querySelector('script[src="https://www.youtube.com/iframe_api"]');
+    if (!script) {
+      script = document.createElement("script");
+      script.src = "https://www.youtube.com/iframe_api";
+      script.async = true;
+      document.head.appendChild(script);
+    }
+    script.addEventListener("error", () => {
+      youtubeApiPromise = null;
+      reject(new Error("Could not load YouTube's official player."));
+    }, { once: true });
+  });
+
+  return youtubeApiPromise;
+}
+
+function loadYouTubeVideo(videoId) {
+  const shell = document.getElementById("youtube-player-shell");
+  if (shell) shell.hidden = false;
+  const unavailable = document.getElementById("youtube-unavailable");
+  if (unavailable) unavailable.hidden = true;
+
+  loadYouTubeIframeApi().then(YT => {
+    if (!isYouTubeEmbedActive || activeYouTubeVideoId !== videoId) return;
+
+    if (!youtubePlayer) {
+      youtubePlayer = new YT.Player("youtube-player", {
+        width: "100%",
+        height: "100%",
+        videoId,
+        playerVars: {
+          autoplay: 0,
+          controls: 1,
+          enablejsapi: 1,
+          playsinline: 1,
+          rel: 0,
+          origin: window.location.origin
+        },
+        events: {
+          onReady: event => {
+            youtubePlayerReady = true;
+            const currentVideoId = activeYouTubeVideoId;
+            if (currentVideoId && currentVideoId !== videoId) {
+              youtubePlayerVideoId = currentVideoId;
+              event.target.loadVideoById(currentVideoId);
+            } else {
+              youtubePlayerVideoId = videoId;
+            }
+            event.target.setVolume(Math.round(audio.volume * 100));
+            if (playbackRequested && isYouTubeEmbedActive) event.target.playVideo();
+          },
+          onStateChange: handleYouTubePlayerState,
+          onError: event => {
+            if (!isYouTubeEmbedActive) return;
+            console.warn("YouTube embed could not play this video:", event.data);
+            const fallback = document.getElementById("youtube-unavailable");
+            const link = document.getElementById("youtube-open-link");
+            if (fallback && link) {
+              link.href = `https://www.youtube.com/watch?v=${encodeURIComponent(activeYouTubeVideoId)}`;
+              fallback.hidden = false;
+            }
+            playbackRequested = true;
+            void handlePlaybackFailure();
+          }
+        }
+      });
+      youtubePlayerVideoId = videoId;
+      return;
+    }
+
+    if (!youtubePlayerReady) return;
+    if (youtubePlayerVideoId !== videoId) {
+      youtubePlayerVideoId = videoId;
+      youtubePlayer.loadVideoById(videoId);
+      if (playbackRequested) youtubePlayer.playVideo();
+    }
+  }).catch(error => {
+    if (isYouTubeEmbedActive && activeYouTubeVideoId === videoId) {
+      console.warn("YouTube player setup failed:", error);
+      playbackRequested = true;
+      void handlePlaybackFailure();
+    }
+  });
+}
+
+function handleYouTubePlayerState(event) {
+  if (!isYouTubeEmbedActive) return;
+
+  if (event.data === 1) {
+    isPlaying = true;
+    playbackRequested = true;
+    document.getElementById("icon-play").style.display = "none";
+    document.getElementById("icon-pause").style.display = "block";
+    if (!youtubeProgressTimer) youtubeProgressTimer = setInterval(updateYouTubeProgress, 500);
+    if (typeof syncNowPlayingModal === "function") syncNowPlayingModal();
+  } else if (event.data === 2) {
+    isPlaying = false;
+    playbackRequested = false;
+    document.getElementById("icon-play").style.display = "block";
+    document.getElementById("icon-pause").style.display = "none";
+    clearInterval(youtubeProgressTimer);
+    youtubeProgressTimer = null;
+    if (typeof syncNowPlayingModal === "function") syncNowPlayingModal();
+  } else if (event.data === 0) {
+    isPlaying = false;
+    clearInterval(youtubeProgressTimer);
+    youtubeProgressTimer = null;
+    if (audio.loop) {
+      youtubePlayer.seekTo(0, true);
+      youtubePlayer.playVideo();
+    } else {
+      nextTrack();
+    }
+  }
+}
+
+function updateYouTubeProgress() {
+  if (!isYouTubeEmbedActive || !youtubePlayerReady) return;
+  const currentTime = youtubePlayer.getCurrentTime();
+  const duration = youtubePlayer.getDuration();
+  if (!duration) return;
+
+  if (snippetDuration > 0 && currentTime >= snippetDuration) {
+    pauseAudio();
+    showToast("Snippet Finished", `${snippetDuration}s preview completed. Moving to next track...`, "⏭️");
+    setTimeout(nextTrack, 450);
+    return;
+  }
+
+  document.getElementById("current-time-label").innerText = formatTime(Math.floor(currentTime));
+  document.getElementById("total-time-label").innerText = formatTime(Math.floor(duration));
+  const progress = Math.min(1, currentTime / duration);
+  document.getElementById("progress-fill").style.width = `${progress * 100}%`;
+
+  const arc = document.getElementById("arc-bg-path");
+  const arcProgress = document.getElementById("arc-progress-path");
+  const arcDot = document.getElementById("arc-scrubber-dot");
+  if (arc && arcProgress && arcDot) {
+    const length = arc.getTotalLength();
+    arcProgress.style.strokeDasharray = length;
+    arcProgress.style.strokeDashoffset = length * (1 - progress);
+    const point = arc.getPointAtLength(progress * length);
+    arcDot.setAttribute("cx", point.x);
+    arcDot.setAttribute("cy", point.y);
+  }
+}
+
+function seekYouTubePlayback(seconds) {
+  if (isYouTubeEmbedActive && youtubePlayerReady) youtubePlayer.seekTo(seconds, true);
+}
 
 function loadCurrentTrack(track) {
   currentTrack = track;
   previewFallbackPromise = null;
   playbackErrorShown = false;
   playbackRequested = false;
+  isPlaying = false;
   isPreviewPlayback = false;
+  document.getElementById("icon-play").style.display = "block";
+  document.getElementById("icon-pause").style.display = "none";
   document.getElementById("current-title").innerText = track.title;
   document.getElementById("current-artist").innerText = track.artist_name;
   document.getElementById("current-cover").src = track.cover_art_url;
@@ -932,7 +1073,7 @@ function loadCurrentTrack(track) {
   document.getElementById("lyrics-track-title").innerText = `${track.title} — Lyrics`;
   document.getElementById("lyrics-content").innerText = track.lyrics || "— Instrumental Piece —";
 
-  const isYouTube = track.id.startsWith("yt_");
+  const isYouTube = track.id.startsWith("yt_") && !track.offlineUrl;
   const isItunes = track.id.startsWith("itunes_") || (track.stream_url && track.stream_url.includes("apple.com"));
 
   // Technical Honesty Badge (FR-004)
@@ -943,10 +1084,10 @@ function loadCurrentTrack(track) {
     audio.src = track.offlineUrl;
   } else if (isYouTube) {
     badgeText = "16-bit / 48 kHz AAC (YouTube Direct)";
-    statusText = "Live YouTube Stream";
+    statusText = "Official YouTube Player";
   } else if (isItunes) {
-    badgeText = "16-bit / 44.1 kHz AAC (Full Audio Stream)";
-    statusText = "Full Song Stream";
+    badgeText = "Apple Music Preview · up to 30 seconds";
+    statusText = "Preview Playback";
   }
 
   document.getElementById("current-badge-text").innerText = badgeText;
@@ -963,19 +1104,35 @@ function loadCurrentTrack(track) {
   }
   updateSnippetDisplay();
 
-  if (!track.offlineUrl) {
-    if (isYouTube) {
-      const videoId = track.id.replace("yt_", "");
-      document.getElementById("current-badge-text").innerText = "Connecting YouTube Stream...";
-      audio.src = `${API_BASE}/youtube/audio/${videoId}`;
+  if (isYouTube) {
+    isYouTubeEmbedActive = true;
+    activeYouTubeVideoId = track.id.replace("yt_", "");
+    audio.pause();
+    audio.removeAttribute("src");
+    audio.load();
+    document.getElementById("current-badge-text").innerText = "YouTube video · Full playback";
+    loadYouTubeVideo(activeYouTubeVideoId);
+  } else {
+    isYouTubeEmbedActive = false;
+    activeYouTubeVideoId = "";
+    clearInterval(youtubeProgressTimer);
+    youtubeProgressTimer = null;
+    if (youtubePlayerReady) youtubePlayer.stopVideo();
+    const youtubeShell = document.getElementById("youtube-player-shell");
+    if (youtubeShell) youtubeShell.hidden = true;
+    const youtubeUnavailable = document.getElementById("youtube-unavailable");
+    if (youtubeUnavailable) youtubeUnavailable.hidden = true;
+
+    if (track.offlineUrl) {
+      audio.src = track.offlineUrl;
     } else if (isItunes) {
-      if (track.full_stream_url) {
-        audio.src = track.full_stream_url;
+      const previewUrl = track._previewUrl || track.previewUrl || "";
+      if (previewUrl) {
+        isPreviewPlayback = true;
+        audio.src = previewUrl;
+        document.getElementById("current-badge-text").innerText = "iTunes Preview";
       } else {
-        document.getElementById("current-badge-text").innerText = "Connecting Full Audio Stream...";
-        // Set audio.src directly to our full-song resolver endpoint so full playback starts immediately
-        audio.src = `${API_BASE}/catalog/audio/${track.id}?title=${encodeURIComponent(track.title)}&artist=${encodeURIComponent(track.artist_name || "")}`;
-        resolveFullTrackForItunes(track);
+        audio.removeAttribute("src");
       }
     } else if (track.stream_url && track.stream_url.startsWith(`${API_BASE}/catalog/audio/`)) {
       audio.src = track.stream_url;
@@ -984,8 +1141,9 @@ function loadCurrentTrack(track) {
     } else {
       audio.src = `${API_BASE}/catalog/audio/${track.id}?title=${encodeURIComponent(track.title)}&artist=${encodeURIComponent(track.artist_name || "")}`;
     }
+    audio.load();
   }
-  audio.load();
+  updateCurrentDownloadButton();
   updateMediaSession(track);
 }
 
@@ -1008,6 +1166,16 @@ function togglePlayPause() {
 async function tryPreviewFallback(track) {
   if (!track || currentTrack !== track || isPreviewPlayback) return false;
   if (previewFallbackPromise) return previewFallbackPromise;
+
+  if (isYouTubeEmbedActive) {
+    isYouTubeEmbedActive = false;
+    activeYouTubeVideoId = "";
+    clearInterval(youtubeProgressTimer);
+    youtubeProgressTimer = null;
+    if (youtubePlayerReady) youtubePlayer.stopVideo();
+    const youtubeShell = document.getElementById("youtube-player-shell");
+    if (youtubeShell) youtubeShell.hidden = true;
+  }
 
   previewFallbackPromise = (async () => {
     let previewUrl = track._previewUrl || track.previewUrl || "";
@@ -1093,6 +1261,17 @@ async function handlePlaybackFailure() {
 
 function playAudio() {
   playbackRequested = true;
+  if (isYouTubeEmbedActive) {
+    if (typeof openNowPlayingModal === "function") openNowPlayingModal();
+    if (youtubePlayerReady && youtubePlayerVideoId === activeYouTubeVideoId) youtubePlayer.playVideo();
+    return;
+  }
+
+  if (currentTrack && currentTrack.id.startsWith("itunes_") && !isPreviewPlayback) {
+    void handlePlaybackFailure();
+    return;
+  }
+
   initAudioContext();
   audio.play().then(() => {
     isPlaying = true;
@@ -1106,6 +1285,14 @@ function playAudio() {
 }
 
 function pauseAudio() {
+  if (isYouTubeEmbedActive) {
+    playbackRequested = false;
+    if (youtubePlayerReady) youtubePlayer.pauseVideo();
+    isPlaying = false;
+    document.getElementById("icon-play").style.display = "block";
+    document.getElementById("icon-pause").style.display = "none";
+    return;
+  }
   audio.pause();
   playbackRequested = false;
   isPlaying = false;
@@ -1167,13 +1354,17 @@ audio.addEventListener("ended", () => {
 });
 
 audio.addEventListener("error", () => {
-  if (playbackRequested) void handlePlaybackFailure();
+  if (playbackRequested && !isYouTubeEmbedActive) void handlePlaybackFailure();
 });
 
 function handleSeek(e) {
   const rect = document.getElementById("progress-track").getBoundingClientRect();
   const clickX = e.clientX - rect.left;
   const fraction = Math.max(0, Math.min(1, clickX / rect.width));
+  if (isYouTubeEmbedActive && youtubePlayerReady) {
+    youtubePlayer.seekTo(fraction * youtubePlayer.getDuration(), true);
+    return;
+  }
   const effectiveDuration = (snippetDuration > 0) ? snippetDuration : (audio.duration || currentTrack.duration_seconds || 0);
   if (effectiveDuration > 0) {
     audio.currentTime = fraction * effectiveDuration;
@@ -1181,7 +1372,9 @@ function handleSeek(e) {
 }
 
 function handleVolume(val) {
-  audio.volume = parseFloat(val);
+  const volume = parseFloat(val);
+  audio.volume = volume;
+  if (isYouTubeEmbedActive && youtubePlayerReady) youtubePlayer.setVolume(Math.round(volume * 100));
 }
 
 function formatTime(seconds) {
@@ -1352,6 +1545,11 @@ async function downloadTrack(trackId) {
   const track = activeTracks.find(t => t.id === trackId) || (currentTrack && currentTrack.id === trackId ? currentTrack : null);
   if (!track) return;
 
+  if (/^(yt_|itunes_)/.test(track.id)) {
+    showToast("Offline download unavailable", "This streaming source only supports online playback.", "⚠️");
+    return;
+  }
+
   if (offlineDownloads.some(item => item.id === track.id)) {
     showToast("Already Saved", `"${track.title}" is ready in the offline library.`, "✓");
     return;
@@ -1365,11 +1563,9 @@ async function downloadTrack(trackId) {
   updateCurrentDownloadButton();
 
   try {
-    const audioURL = (track.stream_url && track.stream_url.startsWith("http") && !track.id.startsWith("yt_"))
+    const audioURL = track.stream_url && track.stream_url.startsWith("http")
       ? track.stream_url
-      : (track.id.startsWith("yt_")
-          ? `${API_BASE}/youtube/audio/${track.id.replace("yt_", "")}`
-          : `${API_BASE}/catalog/audio/${track.id}`);
+      : `${API_BASE}/catalog/audio/${track.id}`;
     const response = await fetch(audioURL);
     if (!response.ok) throw new Error(`Download failed (${response.status})`);
 
@@ -1435,16 +1631,23 @@ function updateCurrentDownloadButton() {
   const state = downloadStates[currentTrack.id];
   const isSaved = offlineDownloads.some(item => item.id === currentTrack.id);
   const isDownloading = state?.status === "downloading";
+  const streamOnly = /^(yt_|itunes_)/.test(currentTrack.id);
   label.innerText = isDownloading
     ? `Downloading ${Math.round(state.progress)}%`
     : isSaved
       ? "Saved Offline"
-      : "Download";
-  button.disabled = isDownloading || isSaved;
+      : streamOnly
+        ? "Stream Only"
+        : "Download";
+  button.disabled = isDownloading || isSaved || streamOnly;
   button.classList.toggle("downloading", isDownloading);
   button.classList.toggle("saved", isSaved);
   button.setAttribute("aria-label", label.innerText);
-  button.title = isSaved ? "Saved for offline listening" : "Download song for offline listening";
+  button.title = streamOnly
+    ? "Offline downloads are not available for this streaming source"
+    : isSaved
+      ? "Saved for offline listening"
+      : "Download song for offline listening";
 }
 
 function renderOfflineDownloads() {
@@ -1806,9 +2009,11 @@ function filterOfflineList(query) {
 }
 
 async function downloadRecommendedBatch() {
-  const tracksToDownload = activeTracks.filter(t => !offlineDownloads.some(d => d.id === t.id)).slice(0, 3);
+  const tracksToDownload = activeTracks
+    .filter(track => !/^(yt_|itunes_)/.test(track.id) && !offlineDownloads.some(item => item.id === track.id))
+    .slice(0, 3);
   if (tracksToDownload.length === 0) {
-    showToast("All Downloaded", "All current tracks are already in your offline vault!", "✅");
+    showToast("No offline downloads available", "Current streaming tracks can only be played online.", "⚠️");
     return;
   }
   showToast("Batch Download", `Downloading ${tracksToDownload.length} tracks for offline listening...`, "📥");
@@ -1917,11 +2122,20 @@ function updateMediaSession(track) {
     navigator.mediaSession.setActionHandler("previoustrack", () => prevTrack());
     navigator.mediaSession.setActionHandler("nexttrack", () => nextTrack());
     navigator.mediaSession.setActionHandler("seekbackward", () => {
-      audio.currentTime = Math.max(audio.currentTime - 10, 0);
+      if (isYouTubeEmbedActive && youtubePlayerReady) {
+        youtubePlayer.seekTo(Math.max(youtubePlayer.getCurrentTime() - 10, 0), true);
+      } else {
+        audio.currentTime = Math.max(audio.currentTime - 10, 0);
+      }
     });
     navigator.mediaSession.setActionHandler("seekforward", () => {
-      const limit = (snippetDuration > 0) ? snippetDuration : (audio.duration || 0);
-      audio.currentTime = Math.min(audio.currentTime + 10, limit);
+      if (isYouTubeEmbedActive && youtubePlayerReady) {
+        const limit = (snippetDuration > 0) ? snippetDuration : youtubePlayer.getDuration();
+        youtubePlayer.seekTo(Math.min(youtubePlayer.getCurrentTime() + 10, limit), true);
+      } else {
+        const limit = (snippetDuration > 0) ? snippetDuration : (audio.duration || 0);
+        audio.currentTime = Math.min(audio.currentTime + 10, limit);
+      }
     });
   } catch (e) {
     console.debug("MediaSession actions error:", e);

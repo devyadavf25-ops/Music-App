@@ -20,7 +20,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Aura Music">
   
-  <link rel="stylesheet" href="styles.css?v=3.0">
+  <link rel="stylesheet" href="styles.css?v=3.4">
 </head>
 <body>
   <!-- Animated Background -->
@@ -429,7 +429,15 @@
       </div>
 
       <!-- Middle Spacer for full-bleed artwork aesthetic -->
-      <div class="npm-spacer"></div>
+      <div class="npm-spacer">
+        <div class="youtube-player-shell" id="youtube-player-shell" hidden>
+          <div id="youtube-player"></div>
+        </div>
+        <div class="youtube-unavailable" id="youtube-unavailable" hidden>
+          <p>This video does not allow playback inside Aura.</p>
+          <a id="youtube-open-link" href="https://www.youtube.com" target="_blank" rel="noopener noreferrer">Open full video on YouTube</a>
+        </div>
+      </div>
 
       <!-- Bottom Player Section with Iconic Curved Arc Scrubber -->
       <div class="npm-bottom-player">
@@ -751,7 +759,7 @@
   <!-- Audio Element -->
   <audio id="audio-engine" preload="auto" crossorigin="anonymous"></audio>
 
-  <script src="app.js?v=3.3"></script>
+  <script src="app.js?v=3.4"></script>
   <script>
     // Bridge: sync now-playing modal with player state
     function openNowPlayingModal() {
@@ -760,6 +768,7 @@
       syncNowPlayingModal();
     }
     function closeNowPlayingModal() {
+      if (typeof isYouTubeEmbedActive !== 'undefined' && isYouTubeEmbedActive && isPlaying) pauseAudio();
       document.getElementById('now-playing-modal').classList.remove('open');
     }
 
@@ -807,9 +816,11 @@
         if (npmHonesty) {
           const badgeText = document.getElementById('current-badge-text');
           if (badgeText) {
-            badgeText.innerText = currentTrack.id && currentTrack.id.startsWith('yt_')
-              ? 'YouTube Direct Audio Stream'
-              : `${currentTrack.bit_depth || 24}-bit / ${(currentTrack.sample_rate || 96000)/1000} kHz FLAC HI-RES`;
+            badgeText.innerText = isPreviewPlayback
+              ? 'iTunes Preview'
+              : isYouTubeEmbedActive
+                ? 'YouTube player · Full video'
+                : `${currentTrack.bit_depth || 24}-bit / ${(currentTrack.sample_rate || 96000)/1000} kHz FLAC HI-RES`;
           }
         }
       }
@@ -841,6 +852,10 @@
       const effectiveDuration = (typeof snippetDuration !== 'undefined' && snippetDuration > 0)
         ? snippetDuration
         : (audio.duration || (typeof currentTrack !== 'undefined' && currentTrack ? currentTrack.duration_seconds : 248) || 248);
+      if (typeof isYouTubeEmbedActive !== 'undefined' && isYouTubeEmbedActive && typeof seekYouTubePlayback === 'function') {
+        seekYouTubePlayback(ratio * effectiveDuration);
+        return;
+      }
       audio.currentTime = ratio * effectiveDuration;
     }
 

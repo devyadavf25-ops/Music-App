@@ -52,6 +52,7 @@ app.include_router(api_router, prefix="/api")
 
 
 @app.get("/")
+@app.get("/health")
 def health_check():
     db_status = "connected"
     try:
@@ -76,3 +77,4 @@ def health_check():
             "Persistent Relational Database (PostgreSQL / SQLite)"
         ]
     }
+

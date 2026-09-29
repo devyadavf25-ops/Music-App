@@ -168,11 +168,12 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  if (req.url.startsWith("/api/")) {
+  if (req.url.startsWith("/api/") || req.url.startsWith("/health") || req.url.startsWith("/docs") || req.url === "/openapi.json") {
     proxyApiRequest(req, res);
   } else {
     serveStaticFile(req, res);
   }
+
 });
 
 server.listen(PORT, () => {

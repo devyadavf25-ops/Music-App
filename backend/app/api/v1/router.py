@@ -39,6 +39,25 @@ api_router = APIRouter(prefix="/v1")
 logger = logging.getLogger(__name__)
 
 
+@api_router.get("/health")
+def api_health(db: Session = Depends(get_db)):
+    from sqlalchemy import text
+    from ...db.session import DATABASE_URL
+    db_status = "connected"
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception as e:
+        db_status = f"unreachable: {e}"
+    return {
+        "status": "healthy",
+        "service": "Aura Music Platform Backend API",
+        "version": "1.0.0",
+        "database": db_status,
+        "database_type": "postgresql" if "postgresql" in DATABASE_URL else "sqlite",
+        "environment": os.getenv("ENVIRONMENT", "development")
+    }
+
+
 async def _proxy_audio_stream(source_url: str, request: Request) -> StreamingResponse:
     client = httpx.AsyncClient(
         follow_redirects=True,

@@ -7,11 +7,13 @@ YouTube & Global Music Search Service:
 """
 
 import asyncio
-import io
 import os
 import re
 import time
 import logging
+import threading
+import urllib.parse
+from collections import OrderedDict
 from typing import List, Dict, Any, Optional
 import yt_dlp
 import httpx
@@ -23,12 +25,21 @@ DOWNLOADS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "downloads_c
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 
 # In-memory search cache: { query_key: (timestamp, List[Track]) }
-_SEARCH_CACHE: Dict[str, tuple] = {}
+# Bounded LRU — entries expire after TTL and the oldest entries are evicted
+# once the cap is reached so a long-running server cannot leak memory.
+_SEARCH_CACHE: OrderedDict = OrderedDict()
 _CACHE_TTL_SECONDS = 3600  # 1 hour
+_SEARCH_CACHE_MAX_ENTRIES = 512
 
 # Global track metadata registry for instant lookup across catalog/itunes/youtube
-_GLOBAL_TRACK_REGISTRY: Dict[str, Track] = {}
+_GLOBAL_TRACK_REGISTRY: OrderedDict = OrderedDict()
 _ITUNES_PREVIEWS: Dict[str, str] = {}
+_REGISTRY_MAX_ENTRIES = 2048
+
+# Deduplicates concurrent downloads of the same video: concurrent callers all
+# await the same in-flight download instead of racing yt-dlp on one file.
+_INFLIGHT_DOWNLOADS: Dict[str, asyncio.Future] = {}
+_DOWNLOADS_LOCK = threading.Lock()
 
 
 def sanitize_filename(name: str) -> str:
@@ -36,14 +47,32 @@ def sanitize_filename(name: str) -> str:
     return cleaned if cleaned else "track"
 
 
+def _cache_put(cache: OrderedDict, key: str, value: Any, max_entries: int):
+    """Insert into a bounded LRU cache with TTL-agnostic eviction."""
+    with _DOWNLOADS_LOCK:
+        cache[key] = value
+        cache.move_to_end(key)
+        while len(cache) > max_entries:
+            cache.popitem(last=False)
+
+
+def _cache_get(cache: OrderedDict, key: str) -> Optional[Any]:
+    """Fetch from a bounded LRU cache, refreshing recency."""
+    with _DOWNLOADS_LOCK:
+        if key not in cache:
+            return None
+        cache.move_to_end(key)
+        return cache[key]
+
+
 class YouTubeService:
     @classmethod
     def register_track(cls, track: Track):
-        _GLOBAL_TRACK_REGISTRY[track.id] = track
+        _cache_put(_GLOBAL_TRACK_REGISTRY, track.id, track, _REGISTRY_MAX_ENTRIES)
 
     @classmethod
     def get_registered_track(cls, track_id: str) -> Optional[Track]:
-        return _GLOBAL_TRACK_REGISTRY.get(track_id)
+        return _cache_get(_GLOBAL_TRACK_REGISTRY, track_id)
 
     @classmethod
     def register_itunes_preview(cls, track_id: str, preview_url: str):
@@ -51,7 +80,7 @@ class YouTubeService:
 
     @classmethod
     def get_itunes_preview(cls, track_id: str) -> Optional[str]:
-        return _ITUNES_PREVIEWS.get(track_id)
+        return _cache_get(_ITUNES_PREVIEWS, track_id)
 
     @staticmethod
     def browser_wav(file_path: str) -> bytes:
@@ -94,16 +123,24 @@ class YouTubeService:
         return await asyncio.to_thread(cls._sync_search, query, limit)
 
     @classmethod
+    def register_itunes_preview(cls, track_id: str, preview_url: str):
+        _cache_put(_ITUNES_PREVIEWS, track_id, preview_url, _REGISTRY_MAX_ENTRIES)
+
+    @classmethod
     def _sync_search(cls, query: str, limit: int) -> List[Track]:
         cache_key = f"{query.lower().strip()}_{limit}"
         now = time.time()
 
         # 1. Check in-memory cache
-        if cache_key in _SEARCH_CACHE:
-            ts, cached_results = _SEARCH_CACHE[cache_key]
+        cached = _cache_get(_SEARCH_CACHE, cache_key)
+        if cached is not None:
+            ts, cached_results = cached
             if now - ts < _CACHE_TTL_SECONDS:
                 logger.info("Search cache hit for '%s' (%d tracks)", query, len(cached_results))
                 return cached_results
+            # Expired entry — drop it so it cannot be served stale on a miss path
+            with _DOWNLOADS_LOCK:
+                _SEARCH_CACHE.pop(cache_key, None)
 
         tracks: List[Track] = []
 
@@ -229,9 +266,9 @@ class YouTubeService:
                             if len(tracks) >= limit:
                                 break
 
-        # Store in cache
+        # Store in cache (bounded LRU)
         if tracks:
-            _SEARCH_CACHE[cache_key] = (now, tracks)
+            _cache_put(_SEARCH_CACHE, cache_key, (now, tracks), _SEARCH_CACHE_MAX_ENTRIES)
 
         return tracks
 
@@ -241,7 +278,8 @@ class YouTubeService:
         """Fast, 100% reliable global song search with direct AAC previews and HD artwork."""
         tracks = []
         try:
-            url = f"https://itunes.apple.com/search?term={query}&entity=song&limit={limit}"
+            term = urllib.parse.quote(query)
+            url = f"https://itunes.apple.com/search?term={term}&entity=song&limit={limit}"
             with httpx.Client(timeout=6.0) as client:
                 resp = client.get(url)
                 if resp.status_code == 200:
@@ -336,11 +374,39 @@ class YouTubeService:
 
     @classmethod
     async def download_audio(cls, video_id: str) -> Dict[str, Any]:
-        """Downloads the audio stream to downloads_cache and returns file info."""
-        return await asyncio.to_thread(cls._sync_download_audio, video_id)
+        """Downloads the audio stream to downloads_cache and returns file info.
+        Concurrent requests for the same video share a single in-flight download."""
+        with _DOWNLOADS_LOCK:
+            fut = _INFLIGHT_DOWNLOADS.get(video_id)
+            if fut is None:
+                fut = asyncio.get_event_loop().create_future()
+                _INFLIGHT_DOWNLOADS[video_id] = fut
+                is_leader = True
+            else:
+                is_leader = False
+
+        if not is_leader:
+            return await fut
+
+        try:
+            result = await asyncio.to_thread(cls._sync_download_audio, video_id)
+            if not fut.done():
+                fut.set_result(result)
+            return result
+        except Exception as e:
+            if not fut.done():
+                fut.set_exception(e)
+            raise
+        finally:
+            with _DOWNLOADS_LOCK:
+                _INFLIGHT_DOWNLOADS.pop(video_id, None)
 
     @classmethod
     def _sync_download_audio(cls, video_id: str) -> Dict[str, Any]:
+        # 0. Serve metadata straight from registry cache when the file already exists
+        #    (avoids spawning yt-dlp for every playback request of a cached video)
+        reg_track = cls.get_registered_track(f"yt_{video_id}")
+
         # 1. Fast Cache Check: If already downloaded, return immediately!
         for ext in [".m4a", ".webm", ".opus", ".mp3", ".ogg"]:
             candidate = os.path.join(DOWNLOADS_DIR, f"{video_id}{ext}")
@@ -361,8 +427,10 @@ class YouTubeService:
         video_url = f"https://www.youtube.com/watch?v={video_id}"
         output_template = os.path.join(DOWNLOADS_DIR, f"{video_id}.%(ext)s")
 
+        # Prefer m4a (AAC) — universally playable in Chrome, Firefox, Safari and iOS.
+        # webm/opus is a fallback since Safari cannot decode it in <audio> elements.
         ydl_opts = {
-            "format": "bestaudio/best/ba/b",
+            "format": "bestaudio[ext=m4a]/bestaudio[acodec^=mp4a]/bestaudio/best/ba/b",
             "outtmpl": output_template,
             "quiet": True,
             "no_warnings": True,

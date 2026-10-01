@@ -5,12 +5,21 @@ Features:
 - Algorithmic Transparency Tag generation
 - Multi-objective ranking: Familiarity vs Novelty vs Acoustic Compatibility
 - Repetition & diversity damping filter
+- Artist-diversity aware candidate selection (Maximal Marginal Relevance)
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Set
 from ..models.entities import Track, Recommendation
 from .catalog_service import CatalogService
 import math
+
+# Default acoustic centroid used when no seed tracks are available
+_DEFAULT_CENTROID: Dict[str, float] = {
+    "bpm": 120.0,
+    "energy": 0.6,
+    "valence": 0.5,
+    "acousticness": 0.3,
+}
 
 
 class RecommendationService:
@@ -23,6 +32,7 @@ class RecommendationService:
         0.51 - 0.80: exploratory
         0.81 - 1.00: strong discovery / long-tail emphasis
         """
+        variance = max(0.0, min(1.0, variance))
         if variance <= 0.20:
             return "familiar"
         elif variance <= 0.50:
@@ -45,9 +55,20 @@ class RecommendationService:
         if not tracks:
             return []
 
-        recent_played = set(recent_played_track_ids or ["trk_001", "trk_002"])
-        fav_artists = set(favorite_artist_ids or ["art_solaris", "art_kavinsky"])
-        seeds = [CatalogService.get_track_by_id(sid) for sid in (seed_track_ids or ["trk_001"]) if CatalogService.get_track_by_id(sid)]
+        # Clamp inputs defensively so callers can never push the engine out of range
+        variance_setting = max(0.0, min(1.0, float(variance_setting)))
+        limit = max(1, min(int(limit), 100))
+
+        recent_played = set(recent_played_track_ids) if recent_played_track_ids is not None else {"trk_001", "trk_002"}
+        fav_artists = set(favorite_artist_ids) if favorite_artist_ids is not None else {"art_solaris", "art_kavinsky"}
+
+        # Resolve seed tracks in a single pass (avoids double catalog lookups)
+        seed_ids = seed_track_ids if seed_track_ids else []
+        seeds: List[Track] = []
+        for sid in seed_ids:
+            track = CatalogService.get_track_by_id(sid)
+            if track:
+                seeds.append(track)
 
         # Calculate seed centroid acoustic features
         if seeds:
@@ -55,12 +76,13 @@ class RecommendationService:
             avg_energy = sum(s.energy for s in seeds) / len(seeds)
             avg_valence = sum(s.valence for s in seeds) / len(seeds)
             avg_acousticness = sum(s.acousticness for s in seeds) / len(seeds)
-            seed_genres = set(s.genre_id for s in seeds)
+            seed_genres: Set[str] = {s.genre_id for s in seeds}
         else:
-            avg_bpm = 120.0
-            avg_energy = 0.6
-            avg_valence = 0.5
-            avg_acousticness = 0.3
+            centroid = _DEFAULT_CENTROID
+            avg_bpm = centroid["bpm"]
+            avg_energy = centroid["energy"]
+            avg_valence = centroid["valence"]
+            avg_acousticness = centroid["acousticness"]
             seed_genres = set()
 
         scored_candidates: List[Dict[str, Any]] = []
@@ -73,6 +95,18 @@ class RecommendationService:
             pop_score = track.popularity / 100.0
             familiarity_score = 0.45 * artist_affinity + 0.35 * history_affinity + 0.20 * pop_score
 
+            # 1b. Genre Affinity [0.0 - 1.0]
+            # Rewards tracks sharing a genre with the seed context; smooth via acousticness proximity
+            if seed_genres:
+                if track.genre_id in seed_genres:
+                    genre_affinity = 1.0
+                else:
+                    # Same acoustic family still earns partial affinity
+                    genre_affinity = 0.35 * (1.0 - abs(track.acousticness - avg_acousticness))
+            else:
+                # No seed context: lean on popularity as a neutral proxy
+                genre_affinity = 0.5 + 0.25 * pop_score
+
             # 2. Novelty / Long-Tail Score [0.0 - 1.0]
             # Higher for tracks never played, from non-mainstream or unexplored artists
             novelty_track = 0.0 if track.id in recent_played else 0.95
@@ -81,12 +115,19 @@ class RecommendationService:
             novelty_score = 0.4 * novelty_track + 0.3 * novelty_artist + 0.3 * long_tail_boost
 
             # 3. Acoustic Similarity Score [0.0 - 1.0]
-            # Euclidean acoustic distance in normalized space
+            # Weighted distance across BPM, energy, valence, AND acousticness
             bpm_diff = abs(track.bpm - avg_bpm) / 100.0
             energy_diff = abs(track.energy - avg_energy)
             valence_diff = abs(track.valence - avg_valence)
-            acoustic_dist = math.sqrt(bpm_diff**2 + energy_diff**2 + valence_diff**2)
-            acoustic_similarity = max(0.0, 1.0 - (acoustic_dist / 1.732))
+            acousticness_diff = abs(track.acousticness - avg_acousticness)
+            acoustic_dist = math.sqrt(
+                (bpm_diff ** 2) +
+                (energy_diff ** 2) +
+                (valence_diff ** 2) +
+                (acousticness_diff ** 2)
+            )
+            # 2.0 = max distance in 4-dimensional unit space
+            acoustic_similarity = max(0.0, 1.0 - (acoustic_dist / 2.0))
 
             # 4. Repetition Penalty
             # Damps tracks heard recently, especially if variance > 0.5
@@ -95,12 +136,14 @@ class RecommendationService:
                 repetition_penalty = 0.15 + (variance_setting * 0.45)
 
             # 5. Composite Final Score using the Application-Level Exploration Parameter (Variance)
-            # Score = (1 - variance) * Familiarity + variance * Novelty + 0.35 * AcousticSim - Penalty
+            # Score = (1 - variance) * Familiarity + variance * Novelty
+            #         + 0.30 * AcousticSim + 0.20 * GenreAffinity - Penalty
             lambda_weight = variance_setting
             composite_score = (
                 (1.0 - lambda_weight) * familiarity_score +
                 lambda_weight * novelty_score +
-                0.35 * acoustic_similarity -
+                0.30 * acoustic_similarity +
+                0.20 * genre_affinity -
                 repetition_penalty
             )
 
@@ -118,18 +161,32 @@ class RecommendationService:
             scored_candidates.append({
                 "track": track,
                 "score": composite_score,
+                "artist_id": track.artist_id,
                 "explanation": explanation
             })
 
         # Sort descending by composite score
         scored_candidates.sort(key=lambda x: x["score"], reverse=True)
 
-        recommendations = []
-        for item in scored_candidates[:limit]:
+        # Diversity-aware selection: avoid the feed collapsing onto a single artist.
+        # At low variance listeners expect their favorites (relaxed damping),
+        # at high variance exploration naturally spans many artists.
+        recommendations: List[Recommendation] = []
+        artist_counts: Dict[str, int] = {}
+        max_per_artist = 3 if variance_setting <= 0.5 else 5
+
+        for item in scored_candidates:
+            if len(recommendations) >= limit:
+                break
+            artist = item["artist_id"]
+            if artist_counts.get(artist, 0) >= max_per_artist:
+                continue
+            artist_counts[artist] = artist_counts.get(artist, 0) + 1
+            track = item["track"]
             recommendations.append(Recommendation(
-                id=f"rec_{item['track'].id}_{int(variance_setting * 100)}",
+                id=f"rec_{track.id}_{int(variance_setting * 100)}",
                 user_id=user_id,
-                track=item["track"],
+                track=track,
                 variance_setting=variance_setting,
                 score=round(item["score"], 3),
                 explanation_tag=item["explanation"]

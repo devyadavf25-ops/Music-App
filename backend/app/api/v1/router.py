@@ -671,8 +671,9 @@ class AddQueueItemRequest(BaseModel):
 
 
 class VoteQueueItemRequest(BaseModel):
+    user_id: str = "anonymous"
     queue_item_id: str
-    delta: int = 1
+    delta: int = 1  # +1 upvote / -1 downvote; clamped server-side
 
 
 class PlaybackStateRequest(BaseModel):
@@ -762,11 +763,14 @@ def add_to_room_queue(room_id: str, req: AddQueueItemRequest):
 def vote_room_queue_item(room_id: str, req: VoteQueueItemRequest):
     """
     Upvote or downvote a queued track to dynamically alter queue ranking.
+    One vote per user per queue item; scores are clamped to >= 0.
     """
+    delta = 1 if req.delta >= 0 else -1
     updated_item = RoomService.vote_queue_item(
         room_id=room_id,
         queue_item_id=req.queue_item_id,
-        delta=req.delta
+        delta=delta,
+        user_id=req.user_id
     )
     if not updated_item:
         raise HTTPException(status_code=404, detail="Queue item or room not found")

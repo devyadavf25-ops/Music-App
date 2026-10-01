@@ -894,6 +894,10 @@ let playbackErrorShown = false;
 let playbackRequested = false;
 let isPreviewPlayback = false;
 let isYouTubeEmbedActive = false;
+// Per-track playback mode. Full-song server streams are preferred; when one
+// fails, the track is demoted to embed (YouTube) or preview (iTunes) for the session.
+const youtubeFullStreamMode = new Map();
+const itunesFullStreamMode = new Map();
 let activeYouTubeVideoId = "";
 let youtubePlayerVideoId = "";
 let youtubePlayer = null;
@@ -1080,6 +1084,10 @@ function loadCurrentTrack(track) {
 
   const isYouTube = track.id.startsWith("yt_") && !track.offlineUrl;
   const isItunes = track.id.startsWith("itunes_") || (track.stream_url && track.stream_url.includes("apple.com"));
+  // Full-song modes play via the backend's <audio>-compatible endpoints with Range support.
+  // The YouTube IFrame embed is kept as a fallback when the direct stream fails.
+  const useYouTubeFullStream = isYouTube && youtubeFullStreamMode.get(track.id) !== false;
+  const useItunesFullStream = isItunes && itunesFullStreamMode.get(track.id) !== false;
 
   // Technical Honesty Badge (FR-004)
   let badgeText = `${track.bit_depth}-bit / ${track.sample_rate / 1000} kHz ${track.audio_format.toUpperCase()}`;
@@ -1087,9 +1095,15 @@ function loadCurrentTrack(track) {
 
   if (track.offlineUrl) {
     audio.src = track.offlineUrl;
+  } else if (useYouTubeFullStream) {
+    badgeText = "16-bit / 48 kHz AAC (YouTube Full Stream)";
+    statusText = "Full Song · Direct Stream";
   } else if (isYouTube) {
-    badgeText = "16-bit / 48 kHz AAC (YouTube Direct)";
+    badgeText = "YouTube video · Official Player";
     statusText = "Official YouTube Player";
+  } else if (useItunesFullStream) {
+    badgeText = "AAC 256 · Full Song Stream";
+    statusText = "Full Song · Direct Stream";
   } else if (isItunes) {
     badgeText = "Apple Music Preview · up to 30 seconds";
     statusText = "Preview Playback";
@@ -1109,7 +1123,23 @@ function loadCurrentTrack(track) {
   }
   updateSnippetDisplay();
 
-  if (isYouTube) {
+  if (isYouTube && useYouTubeFullStream) {
+    // Full-song mode: stream the backend's downloaded YouTube audio (native <audio> playback)
+    isYouTubeEmbedActive = false;
+    activeYouTubeVideoId = "";
+    clearInterval(youtubeProgressTimer);
+    youtubeProgressTimer = null;
+    if (youtubePlayerReady) youtubePlayer.stopVideo();
+    const youtubeShell = document.getElementById("youtube-player-shell");
+    if (youtubeShell) youtubeShell.hidden = true;
+    const youtubeUnavailable = document.getElementById("youtube-unavailable");
+    if (youtubeUnavailable) youtubeUnavailable.hidden = true;
+
+    const videoId = track.id.replace("yt_", "");
+    audio.src = `${API_BASE}/youtube/audio/${encodeURIComponent(videoId)}`;
+    document.getElementById("current-badge-text").innerText = "YouTube Full Song · Server Stream";
+    audio.load();
+  } else if (isYouTube) {
     isYouTubeEmbedActive = true;
     activeYouTubeVideoId = track.id.replace("yt_", "");
     audio.pause();
@@ -1130,12 +1160,18 @@ function loadCurrentTrack(track) {
 
     if (track.offlineUrl) {
       audio.src = track.offlineUrl;
+    } else if (isItunes && useItunesFullStream) {
+      // Full-song mode: let the backend resolve a complete stream (no 30s preview cap)
+      const fullUrl = `${API_BASE}/catalog/audio/${encodeURIComponent(track.id)}?title=${encodeURIComponent(track.title || "")}&artist=${encodeURIComponent(track.artist_name || "")}`;
+      audio.src = fullUrl;
+      document.getElementById("current-badge-text").innerText = "Full Song · Resolving Stream";
+      isPreviewPlayback = false;
     } else if (isItunes) {
       const previewUrl = track._previewUrl || track.previewUrl || "";
       if (previewUrl) {
         isPreviewPlayback = true;
         audio.src = previewUrl;
-        document.getElementById("current-badge-text").innerText = "iTunes Preview";
+        document.getElementById("current-badge-text") && (document.getElementById("current-badge-text").innerText = "iTunes Preview");
       } else {
         audio.removeAttribute("src");
       }
@@ -1249,6 +1285,24 @@ async function handlePlaybackFailure() {
   const track = currentTrack;
   if (!track || !playbackRequested || playbackErrorShown) return;
 
+  // Full-song stream failed: demote this track and retry with a fallback source.
+  if (track.id.startsWith("yt_") && youtubeFullStreamMode.get(track.id) !== false && track === currentTrack) {
+    console.warn("YouTube full stream failed, falling back to the official embed player");
+    youtubeFullStreamMode.set(track.id, false);
+    playbackErrorShown = false;
+    loadCurrentTrack(track);
+    playAudio();
+    return;
+  }
+  if (track.id.startsWith("itunes_") && itunesFullStreamMode.get(track.id) !== false && track === currentTrack) {
+    console.warn("iTunes full stream failed, falling back to the 30s preview");
+    itunesFullStreamMode.set(track.id, false);
+    playbackErrorShown = false;
+    loadCurrentTrack(track);
+    playAudio();
+    return;
+  }
+
   const needsBackend = /^(itunes_|yt_)/.test(track.id);
   if (needsBackend && await tryPreviewFallback(track)) return;
   if (track !== currentTrack || playbackErrorShown) return;
@@ -1276,7 +1330,7 @@ function playAudio() {
     return;
   }
 
-  if (currentTrack && currentTrack.id.startsWith("itunes_") && !isPreviewPlayback) {
+  if (currentTrack && currentTrack.id.startsWith("itunes_") && !isPreviewPlayback && itunesFullStreamMode.get(currentTrack.id) === false) {
     void handlePlaybackFailure();
     return;
   }
@@ -1567,11 +1621,6 @@ async function downloadTrack(trackId) {
   const track = activeTracks.find(t => t.id === trackId) || (currentTrack && currentTrack.id === trackId ? currentTrack : null);
   if (!track) return;
 
-  if (/^(yt_|itunes_)/.test(track.id)) {
-    showToast("Offline download unavailable", "This streaming source only supports online playback.", "⚠️");
-    return;
-  }
-
   if (offlineDownloads.some(item => item.id === track.id)) {
     showToast("Already Saved", `"${track.title}" is ready in the offline library.`, "✓");
     return;
@@ -1585,9 +1634,7 @@ async function downloadTrack(trackId) {
   updateCurrentDownloadButton();
 
   try {
-    const audioURL = track.stream_url && track.stream_url.startsWith("http")
-      ? track.stream_url
-      : `${API_BASE}/catalog/audio/${track.id}`;
+    const audioURL = buildDownloadUrl(track);
     const response = await fetch(audioURL);
     if (!response.ok) throw new Error(`Download failed (${response.status})`);
 
@@ -1645,6 +1692,23 @@ function downloadCurrentTrack() {
   }
 }
 
+// Resolve the correct full-length download URL for any track type.
+// YouTube: dedicated server-side download endpoint (proxied attachment).
+// iTunes: resolved to a full-length stream by the backend catalog audio endpoint.
+// Catalog: proxied through the backend with Range support.
+function buildDownloadUrl(track) {
+  if (track.id.startsWith("yt_")) {
+    const videoId = track.id.replace("yt_", "");
+    return `${API_BASE}/youtube/download/${encodeURIComponent(videoId)}`;
+  }
+  if (track.id.startsWith("itunes_")) {
+    return `${API_BASE}/catalog/audio/${encodeURIComponent(track.id)}?title=${encodeURIComponent(track.title || "")}&artist=${encodeURIComponent(track.artist_name || "")}`;
+  }
+  return track.stream_url && track.stream_url.startsWith("http")
+    ? track.stream_url
+    : `${API_BASE}/catalog/audio/${track.id}`;
+}
+
 function updateCurrentDownloadButton() {
   const button = document.getElementById("btn-download-current");
   const label = document.getElementById("download-btn-text");
@@ -1653,23 +1717,18 @@ function updateCurrentDownloadButton() {
   const state = downloadStates[currentTrack.id];
   const isSaved = offlineDownloads.some(item => item.id === currentTrack.id);
   const isDownloading = state?.status === "downloading";
-  const streamOnly = /^(yt_|itunes_)/.test(currentTrack.id);
   label.innerText = isDownloading
     ? `Downloading ${Math.round(state.progress)}%`
     : isSaved
       ? "Saved Offline"
-      : streamOnly
-        ? "Stream Only"
-        : "Download";
-  button.disabled = isDownloading || isSaved || streamOnly;
+      : "Download";
+  button.disabled = isDownloading || isSaved;
   button.classList.toggle("downloading", isDownloading);
   button.classList.toggle("saved", isSaved);
   button.setAttribute("aria-label", label.innerText);
-  button.title = streamOnly
-    ? "Offline downloads are not available for this streaming source"
-    : isSaved
-      ? "Saved for offline listening"
-      : "Download song for offline listening";
+  button.title = isSaved
+    ? "Saved for offline listening"
+    : "Download song for offline listening";
 }
 
 function renderOfflineDownloads() {

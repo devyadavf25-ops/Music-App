@@ -530,8 +530,8 @@ async function executeSearch(query) {
   let cloudResults = [];
   if (searchSource === "all" || searchSource === "youtube") {
     try {
-      // 12.0s timeout to allow YouTube backend search to return full tracks directly
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 12000));
+      // 20s timeout: cloud backends waking from sleep need extra headroom
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 20000));
       const fetchPromise = fetch(`${API_BASE}/youtube/search?q=${encodeURIComponent(query)}&limit=15`, { signal });
       const res = await Promise.race([fetchPromise, timeoutPromise]);
       if (res && res.ok) {
@@ -1084,9 +1084,11 @@ function loadCurrentTrack(track) {
 
   const isYouTube = track.id.startsWith("yt_") && !track.offlineUrl;
   const isItunes = track.id.startsWith("itunes_") || (track.stream_url && track.stream_url.includes("apple.com"));
-  // Full-song modes play via the backend's <audio>-compatible endpoints with Range support.
-  // The YouTube IFrame embed is kept as a fallback when the direct stream fails.
-  const useYouTubeFullStream = isYouTube && youtubeFullStreamMode.get(track.id) !== false;
+  // Playback strategy: the YouTube IFrame embed is the PRIMARY path — it is instant,
+  // plays the full song, and works everywhere because it streams from the user's
+  // own browser connection (server proxies often get blocked by YouTube from cloud
+  // IPs). The backend server stream is the FALLBACK for embed errors/blocks.
+  const useYouTubeFullStream = isYouTube && youtubeFullStreamMode.get(track.id) === true;
   const useItunesFullStream = isItunes && itunesFullStreamMode.get(track.id) !== false;
 
   // Technical Honesty Badge (FR-004)
@@ -1096,11 +1098,11 @@ function loadCurrentTrack(track) {
   if (track.offlineUrl) {
     audio.src = track.offlineUrl;
   } else if (useYouTubeFullStream) {
-    badgeText = "16-bit / 48 kHz AAC (YouTube Full Stream)";
-    statusText = "Full Song · Direct Stream";
+    badgeText = "16-bit / 48 kHz AAC (Server Stream)";
+    statusText = "Full Song · Server Stream";
   } else if (isYouTube) {
-    badgeText = "YouTube video · Official Player";
-    statusText = "Official YouTube Player";
+    badgeText = "YouTube · Official Player (Full Song)";
+    statusText = "Full Song · Instant Start";
   } else if (useItunesFullStream) {
     badgeText = "AAC 256 · Full Song Stream";
     statusText = "Full Song · Direct Stream";
@@ -1123,8 +1125,13 @@ function loadCurrentTrack(track) {
   }
   updateSnippetDisplay();
 
+  // If a previous full-stream attempt failed for this track, retry it now.
+  if (isYouTube && !useYouTubeFullStream) youtubeFullStreamMode.delete(track.id);
+  if (isItunes && !useItunesFullStream) itunesFullStreamMode.delete(track.id);
+
   if (isYouTube && useYouTubeFullStream) {
-    // Full-song mode: stream the backend's downloaded YouTube audio (native <audio> playback)
+    // Fallback mode: backend server stream (native <audio>). Used when the embed
+    // errors — e.g. embedding disabled — and only when the server can reach YouTube.
     isYouTubeEmbedActive = false;
     activeYouTubeVideoId = "";
     clearInterval(youtubeProgressTimer);
@@ -1285,14 +1292,21 @@ async function handlePlaybackFailure() {
   const track = currentTrack;
   if (!track || !playbackRequested || playbackErrorShown) return;
 
-  // Full-song stream failed: demote this track and retry with a fallback source.
-  if (track.id.startsWith("yt_") && youtubeFullStreamMode.get(track.id) !== false && track === currentTrack) {
-    console.warn("YouTube full stream failed, falling back to the official embed player");
+  // Ladder (YouTube): embed (primary) → server stream → iTunes preview → error
+  if (track.id.startsWith("yt_")) {
+    if (youtubeFullStreamMode.get(track.id) !== true) {
+      // Embed failed or blocked — try the backend server stream once
+      console.warn("YouTube embed unavailable, trying the backend server stream");
+      youtubeFullStreamMode.set(track.id, true);
+      playbackErrorShown = false;
+      if (track === currentTrack) {
+        loadCurrentTrack(track);
+        playAudio();
+      }
+      return;
+    }
+    // Server stream also failed — permanently demote to embed/preview for this session
     youtubeFullStreamMode.set(track.id, false);
-    playbackErrorShown = false;
-    loadCurrentTrack(track);
-    playAudio();
-    return;
   }
   if (track.id.startsWith("itunes_") && itunesFullStreamMode.get(track.id) !== false && track === currentTrack) {
     console.warn("iTunes full stream failed, falling back to the 30s preview");
@@ -1682,7 +1696,14 @@ async function downloadTrack(trackId) {
     delete downloadStates[track.id];
     renderTracks();
     updateCurrentDownloadButton();
-    showToast("Download Failed", "Keep the backend running and try again.", "⚠️");
+    const isCloudBlocked = track.id.startsWith("yt_") && !String(API_BASE).includes("localhost") && !String(API_BASE).includes("127.0.0.1");
+    showToast(
+      "Download Failed",
+      isCloudBlocked
+        ? "YouTube blocks downloads from cloud servers (like Render). Run the backend locally (npm run dev) to download."
+        : "The audio source is unavailable right now. Please try again.",
+      "⚠️"
+    );
   }
 }
 
@@ -1694,6 +1715,9 @@ function downloadCurrentTrack() {
 
 // Resolve the correct full-length download URL for any track type.
 // YouTube: dedicated server-side download endpoint (proxied attachment).
+// NOTE: when the backend runs on a cloud host (Render), YouTube may block its
+// IP — the download then fails with 502 and we surface a clear explanation
+// instead of a generic error. Self-hosted/local backends work fully.
 // iTunes: resolved to a full-length stream by the backend catalog audio endpoint.
 // Catalog: proxied through the backend with Range support.
 function buildDownloadUrl(track) {
@@ -2181,6 +2205,14 @@ if ("serviceWorker" in navigator) {
       });
   });
 }
+
+// 1b. Backend Keep-Alive: free Render tiers sleep after 15 min idle, which made
+// the first search/play take 50+ seconds. A light ping every 10 minutes while
+// the tab is visible keeps the backend warm so playback starts instantly.
+setInterval(() => {
+  if (document.visibilityState !== "visible") return;
+  fetch(`${API_BASE}/../health`, { cache: "no-store" }).catch(() => {});
+}, 10 * 60 * 1000);
 
 // 2. Lock-Screen & Mobile Notification Audio Controls (MediaSession API)
 function updateMediaSessionPlaybackState(state) {

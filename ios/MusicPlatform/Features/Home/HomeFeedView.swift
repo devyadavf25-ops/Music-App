@@ -14,6 +14,7 @@ public struct HomeFeedView: View {
     @ObservedObject private var downloadManager = DownloadManager.shared
     @State private var varianceSetting: Double = 0.50
     @State private var recommendations: [RecommendationItem] = []
+    @State private var showSettings: Bool = false
     
     // Sample catalog seed for preview & demonstration
     private let sampleTracks: [Track] = [
@@ -249,9 +250,7 @@ public struct HomeFeedView: View {
                                 
                                 // Download for Offline Listening
                                 Button(action: {
-                                    Task {
-                                        try? await downloadManager.downloadYouTubeTrack(rec.track)
-                                    }
+                                    downloadManager.downloadTrack(rec.track)
                                 }) {
                                     if downloadManager.isDownloaded(trackId: rec.track.id) {
                                         Image(systemName: "checkmark.circle.fill")
@@ -287,6 +286,18 @@ public struct HomeFeedView: View {
             .background(Color.black.ignoresSafeArea())
             .onAppear {
                 recalculateRecommendations()
+            }
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: { showSettings = true }) {
+                        Image(systemName: "gearshape")
+                            .foregroundColor(.white)
+                    }
+                    .accessibilityLabel("Settings")
+                }
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsView(player: player)
             }
         }
     }

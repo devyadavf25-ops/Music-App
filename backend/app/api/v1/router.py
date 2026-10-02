@@ -26,7 +26,7 @@ from ...services.recommendation_service import RecommendationService
 from ...services.shuffle_service import ShuffleService
 from ...services.reconciliation_service import ReconciliationService
 from ...services.royalty_calculator import UserCentricRoyaltyCalculator
-from ...services.youtube_service import YouTubeService
+from ...services.youtube_service import YouTubeService, DOWNLOADS_DIR as YoutubeDownloadsDir, _AUDIO_EXTS as YoutubeAudioExts, _ext_to_mime as yt_ext_mime, youtube_network_configured
 from ...services.room_service import RoomService
 from ...db.session import get_db
 from ...db.models import (
@@ -55,6 +55,23 @@ def api_health(db: Session = Depends(get_db)):
         "database": db_status,
         "database_type": "postgresql" if "postgresql" in DATABASE_URL else "sqlite",
         "environment": os.getenv("ENVIRONMENT", "development")
+    }
+
+
+@api_router.get("/youtube/status")
+def youtube_download_status():
+    """Diagnostic: reports whether cookies/proxy are configured so YouTube
+    downloads can succeed on cloud hosts like Render (datacenter IPs)."""
+    config = youtube_network_configured()
+    return {
+        "download_ready": config["cookies"] or config["proxy"],
+        "cookies_configured": config["cookies"],
+        "proxy_configured": config["proxy"],
+        "hint": (
+            "Set YOUTUBE_COOKIES_FILE / YOUTUBE_COOKIES_B64 (a Netscape cookies.txt "
+            "exported from a logged-in browser) or YOUTUBE_PROXY in the Render "
+            "environment to enable downloads from cloud IPs."
+        ),
     }
 
 
@@ -499,33 +516,45 @@ async def get_youtube_stream(video_id: str, request: Request):
 
 
 @api_router.get("/youtube/audio/{video_id}")
-async def stream_youtube_audio(video_id: str):
+async def stream_youtube_audio(video_id: str, request: Request):
     """
-    Direct inline audio stream for browser & iOS players with native HTTP 206 Partial Content (Range) support.
-    Streams directly from disk cache with zero memory bloat.
-    """
-    try:
-        info = await YouTubeService.download_audio(video_id)
-        file_path = info["file_path"]
-        ext = os.path.splitext(file_path)[1].lower()
-        mime_type = "audio/mp4" if ext == ".m4a" else ("audio/webm" if ext == ".webm" else ("audio/mpeg" if ext == ".mp3" else "audio/ogg"))
+    Direct inline audio stream for browser & iOS players.
 
-        return FileResponse(
-            path=file_path,
-            media_type=mime_type,
-            filename=info.get("file_name"),
-            headers={
-                "Accept-Ranges": "bytes",
-                "Cache-Control": "public, max-age=604800",
-                "X-Audio-Title": info.get("title", "YouTube Audio")
-            }
+    Streams bytes as they arrive (instant start). If a cached file exists it is
+    served from disk with full Range/206 support; otherwise the stream is piped
+    live from the resolved source. When YouTube blocks the host (common on
+    cloud hosts), a clear 502 is returned quickly instead of hanging.
+    """
+    range_header = request.headers.get("range")
+
+    # Fast path: cached file on disk -> serve with native Range support.
+    for ext in YoutubeAudioExts:
+        candidate = os.path.join(YoutubeDownloadsDir, f"{video_id}{ext}")
+        if os.path.exists(candidate) and os.path.getsize(candidate) > 1024:
+            return FileResponse(
+                path=candidate,
+                media_type=yt_ext_mime(ext),
+                filename=f"{video_id}{ext}",
+                headers={
+                    "Accept-Ranges": "bytes",
+                    "Cache-Control": "public, max-age=604800",
+                    "X-Audio-Title": video_id,
+                },
+            )
+
+    # Live path: pipe bytes as they download (instant start, no waiting).
+    try:
+        first_header = {"Content-Type": "audio/mp4", "Accept-Ranges": "bytes"}
+        return StreamingResponse(
+            YouTubeService.stream_audio_chunks(video_id, range_header=range_header),
+            media_type="audio/mp4",
+            headers=first_header,
         )
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.exception("Failed to stream YouTube audio for video %s: %s", video_id, e)
-        raise HTTPException(
-            status_code=502,
-            detail=f"Unable to stream the requested audio: {e}",
-        ) from None
+        logger.warning("Live stream failed for %s: %s", video_id, e)
+        raise HTTPException(status_code=502, detail=f"Unable to stream audio: {e}") from None
 
 
 @api_router.get("/youtube/download/{video_id}")

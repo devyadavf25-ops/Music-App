@@ -24,6 +24,16 @@ services:
         fromDatabase:
           name: aura-music-db
           property: connectionString
+      # --- Enable YouTube downloads on Render (datacenter IPs are blocked by YouTube) ---
+      # Add ONE of these in the Render dashboard to let yt-dlp authenticate:
+      #   YOUTUBE_COOKIES_FILE = /etc/secrets/cookies.txt   (upload a Netscape cookies.txt as a Secret File)
+      #   YOUTUBE_COOKIES_B64  = <base64 of cookies.txt>
+      #   YOUTUBE_PROXY        = http://user:pass@residential-proxy:port
+      # Check readiness at: GET /api/v1/youtube/status
+      # - key: YOUTUBE_COOKIES_FILE
+      #   sync: false
+      # - key: YOUTUBE_PROXY
+      #   sync: false
 
   # 2. Web Prototype Companion (Static Site)
   - type: web

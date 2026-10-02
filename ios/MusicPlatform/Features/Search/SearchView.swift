@@ -15,8 +15,6 @@ public struct SearchView: View {
     @State private var searchResults: [Track] = []
     @State private var isSearching: Bool = false
     @State private var selectedSource: SearchSource = .all
-    @State private var downloadingTrackIds: Set<String> = []
-    @State private var downloadedTrackIds: Set<String> = []
     @State private var errorMessage: String?
     @ObservedObject private var downloadManager = DownloadManager.shared
     
@@ -59,6 +57,17 @@ public struct SearchView: View {
                 }
             }
             .navigationBarHidden(true)
+            .alert(
+                "Download failed",
+                isPresented: Binding(
+                    get: { downloadManager.lastError != nil },
+                    set: { if !$0 { downloadManager.clearError() } }
+                )
+            ) {
+                Button("OK", role: .cancel) { downloadManager.clearError() }
+            } message: {
+                Text(downloadManager.lastError ?? "Please try again.")
+            }
         }
     }
     
@@ -189,7 +198,7 @@ public struct SearchView: View {
     private func searchResultRow(track: Track, index: Int) -> some View {
         let isYouTube = track.id.hasPrefix("yt_")
         let isCurrentlyPlaying = player.currentTrack?.id == track.id
-        let isDownloading = downloadingTrackIds.contains(track.id)
+        let isDownloading = downloadManager.isDownloading(trackId: track.id)
         let isDownloaded = downloadManager.isDownloaded(trackId: track.id)
         
         return Button(action: {
@@ -258,9 +267,9 @@ public struct SearchView: View {
                     .font(.system(size: 12, weight: .medium, design: .monospaced))
                     .foregroundColor(Color(hex: "64748b"))
                 
-                // Download Button
+                // Download Button (runs in a background URLSession)
                 Button(action: {
-                    Task { await downloadTrack(track) }
+                    downloadManager.downloadTrack(track)
                 }) {
                     Group {
                         if isDownloading {
@@ -408,19 +417,4 @@ public struct SearchView: View {
         isSearching = false
     }
     
-    private func downloadTrack(_ track: Track) async {
-        guard track.id.hasPrefix("yt_") else { return }
-        let videoId = String(track.id.dropFirst(3))
-        
-        downloadingTrackIds.insert(track.id)
-        
-        do {
-            try await downloadManager.downloadYouTubeTrack(track)
-            downloadedTrackIds.insert(track.id)
-        } catch {
-            errorMessage = "Download failed: \(error.localizedDescription)"
-        }
-        
-        downloadingTrackIds.remove(track.id)
-    }
 }

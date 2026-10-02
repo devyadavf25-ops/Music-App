@@ -9,6 +9,9 @@ import SwiftUI
 
 @main
 public struct MusicPlatformApp: App {
+    // Receives background URLSession completion events so downloads keep
+    // progressing (and finish) while the app is backgrounded.
+    @UIApplicationDelegateAdaptor(AuraAppDelegate.self) private var appDelegate
     @StateObject private var player = AudioPlayerService.shared
     @State private var isNowPlayingExpanded: Bool = false
     @State private var selectedTab: Int = 0

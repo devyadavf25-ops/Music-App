@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import Foundation
 
 public struct SettingsView: View {
     @ObservedObject var player: AudioPlayerService
@@ -33,6 +34,8 @@ public struct SettingsView: View {
     @AppStorage("AuraCustomBaseURL") private var customBaseURL: String = ""
     @State private var showDeleteConfirmation: Bool = false
     @State private var showClearCacheConfirmation: Bool = false
+    @State private var downloadStatusText: String = ""
+    @State private var isCheckingStatus: Bool = false
     
     private let audioQualities = ["AAC 256 kbps", "Lossless 16-bit / 44.1 kHz", "Hi-Res Lossless 24-bit / 96 kHz"]
     
@@ -149,7 +152,7 @@ public struct SettingsView: View {
                             
                             settingsButton(
                                 title: "Manage Downloads",
-                                subtitle: "\(DownloadManager.shared.downloadedTracks.count) tracks saved offline",
+                                subtitle: "\(DownloadManager.shared.completedDownloads.count) tracks saved offline",
                                 icon: "arrow.down.circle",
                                 isDestructive: false
                             ) {
@@ -182,6 +185,42 @@ public struct SettingsView: View {
                                     )
                                     .autocorrectionDisabled()
                                     .textInputAutocapitalization(.never)
+                            }
+                            .padding(16)
+                            
+                            Divider().background(Color.white.opacity(0.04))
+                            
+                            // Download readiness diagnostic (cloud hosts like Render
+                            // often block YouTube, which breaks server-side downloads)
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("Downloads Readiness")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(.white)
+                                
+                                Text("Checks whether the backend can reach YouTube. Set YOUTUBE_COOKIES_FILE or YOUTUBE_PROXY on the server if it can't.")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(AppTheme.textMuted)
+                                
+                                Button(action: { Task { await checkDownloadReadiness() } }) {
+                                    HStack(spacing: 6) {
+                                        if isCheckingStatus {
+                                            ProgressView().tint(.white).scaleEffect(0.7)
+                                        }
+                                        Text(isCheckingStatus ? "Checking..." : "Test Download Readiness")
+                                            .font(.system(size: 13, weight: .semibold))
+                                    }
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 9)
+                                    .background(Capsule().fill(AppTheme.accentPurple))
+                                }
+                                .disabled(isCheckingStatus)
+                                
+                                if !downloadStatusText.isEmpty {
+                                    Text(downloadStatusText)
+                                        .font(.system(size: 12, design: .monospaced))
+                                        .foregroundColor(.white.opacity(0.85))
+                                }
                             }
                             .padding(16)
                         }
@@ -238,6 +277,42 @@ public struct SettingsView: View {
             } message: {
                 Text("This will remove temporary audio buffers. Your downloaded offline tracks will not be affected.")
             }
+        }
+    }
+    
+    // MARK: - Download Readiness
+    
+    @MainActor
+    private func checkDownloadReadiness() async {
+        isCheckingStatus = true
+        downloadStatusText = ""
+        defer { isCheckingStatus = false }
+        
+        guard let url = URL(string: "\(NetworkAPIClient.baseURL)/youtube/status") else {
+            downloadStatusText = "Invalid server URL."
+            return
+        }
+        
+        do {
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 20
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                downloadStatusText = "Server error. Update/redeploy the backend, then retry."
+                return
+            }
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                downloadStatusText = "Unexpected server response."
+                return
+            }
+            let ready = (json["download_ready"] as? Bool) ?? false
+            let cookies = (json["cookies_configured"] as? Bool) ?? false
+            let proxy = (json["proxy_configured"] as? Bool) ?? false
+            downloadStatusText = ready
+                ? "✅ Downloads ready (cookies: \(cookies), proxy: \(proxy))"
+                : "⚠️ Not ready — set YOUTUBE_COOKIES_FILE or YOUTUBE_PROXY on the server.\ncookies: \(cookies), proxy: \(proxy)"
+        } catch {
+            downloadStatusText = "Could not reach server: \(error.localizedDescription)"
         }
     }
     

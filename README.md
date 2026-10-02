@@ -53,6 +53,11 @@ A next-generation audiophile and AI-powered music streaming platform engineered 
 ### 6. 🔒 Privacy Controls & Settings (SRS FR-024, FR-025)
 - User data control: toggle listening history collection, opt out of analytics, configure social visibility, and request CCPA/GDPR data export or account erasure.
 
+### 7. 📥 Full-Length & Background Offline Downloads (SRS FR-011, FR-012)
+- Plays and downloads the **entire song** (never a 15s/30s clip) via the backend `/catalog/audio` and `/youtube/download` endpoints, with queue auto-advance.
+- The iOS client downloads through a **background `URLSession`**, so transfers keep progressing while the app is backgrounded, suspended, or relaunched by the system.
+- Every download lands in the on-device **offline vault** (`AuraDownloads/`, tracked by a persisted `manifest.json`) and can also be exported to the Files app via **Save to Files**.
+
 ---
 
 ## 📂 Project Structure
@@ -156,6 +161,59 @@ A ready-to-deploy Render blueprint is included in `render.yaml` configuring:
 - Web service running the Uvicorn ASGI server
 - Static prototype site serving
 - Environment variables and auto-scaling rules
+
+### Enabling YouTube downloads on Render (cookies / proxy)
+
+Render runs on datacenter IPs that **YouTube blocks** for `yt-dlp`
+("Sign in to confirm you're not a bot"), so server-side YouTube downloads return
+HTTP 502 there even though the same code works on `localhost`. To let the backend
+authenticate, set **one** of the following environment variables on the Render
+service (Dashboard → Environment). They are applied automatically to every search,
+stream, and download call in `backend/app/services/youtube_service.py`.
+
+| Variable | Purpose | Example |
+| --- | --- | --- |
+| `YOUTUBE_COOKIES_FILE` | Path to a Netscape `cookies.txt` (upload it as a Render Secret File) | `/etc/secrets/cookies.txt` |
+| `YOUTUBE_COOKIES_B64` | Base64-encoded contents of the same file | `IyBOZXRzY2FwZSBIVFRQIENvb2tpZSBGaWxl...` |
+| `YOUTUBE_COOKIES` | Raw cookie-file contents, or an existing file path | `# Netscape HTTP Cookie File...` |
+| `YOUTUBE_PROXY` / `YTDLP_PROXY` | Route `yt-dlp` through a residential proxy | `http://user:pass@proxy-host:8080` |
+
+Steps:
+
+1. Log into YouTube in a desktop browser and export cookies for `youtube.com` with
+   a "Get cookies.txt" extension → `cookies.txt`.
+2. Render → your `aura-music-api` service → **Environment**:
+   - upload `cookies.txt` as a **Secret File** mounted at `/etc/secrets/cookies.txt`, then
+   - add `YOUTUBE_COOKIES_FILE = /etc/secrets/cookies.txt`.
+3. Redeploy and verify readiness:
+   ```bash
+   curl https://<your-service>.onrender.com/api/v1/youtube/status
+   # { "download_ready": true, "cookies_configured": true, "proxy_configured": false, ... }
+   ```
+4. In the iOS app, **Settings → Advanced → Test Download Readiness** performs the same check.
+
+> **Notes**
+> - Cookies expire — re-export them when downloads start failing again.
+> - Render's free tier uses **ephemeral disk**, so the download cache is cleared on every
+>   redeploy/restart. For durable downloads, self-host or use a VPS with a clean/residential IP.
+> - `GET /api/v1/youtube/status` reports whether cookies/proxy are detected and is safe
+>   to call for diagnostics.
+
+### iOS background downloads
+
+The iOS client downloads full-length audio through a **background `URLSession`**
+(identifier `com.aura.music.downloads`) so transfers continue while the app is
+backgrounded, suspended, or relaunched:
+
+- `AudioPlayerService` streams the complete song and auto-advances the queue.
+- `DownloadManager` owns the background session, publishes live progress, saves files to
+  `AuraDownloads/`, and keeps a persisted `manifest.json` (completed) and `pending.json`
+  (in-flight) so state survives relaunches.
+- `AuraAppDelegate` implements `handleEventsForBackgroundURLSession(_:completionHandler:)`
+  and forwards the system completion handler to `DownloadManager`.
+- No extra Info.plist / Background Modes capability is required for background `URLSession` transfers.
+- Downloaded tracks remain in the offline vault **and** can be exported to the Files app via
+  the **Save to Files** share sheet.
 
 ---
 

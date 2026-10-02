@@ -11,10 +11,12 @@ import SwiftUI
 
 public struct NowPlayingView: View {
     @ObservedObject var player: AudioPlayerService
+    @ObservedObject private var downloadManager = DownloadManager.shared
     @Environment(\.dismiss) private var dismiss
     @State private var showingLyrics: Bool = false
     @State private var showingSupportSheet: Bool = false
     @State private var showingQueueSheet: Bool = false
+    @State private var downloadError: String?
     
     public init(player: AudioPlayerService) {
         self.player = player
@@ -179,8 +181,8 @@ public struct NowPlayingView: View {
                             .foregroundColor(player.currentShuffleMode != .standard ? .purple : .gray)
                     }
                     
-                    // Previous
-                    Button(action: { player.seek(to: 0) }) {
+                    // Previous (history-aware)
+                    Button(action: { player.playPrevious() }) {
                         Image(systemName: "backward.fill")
                             .font(.system(size: 26))
                             .foregroundColor(.white)
@@ -200,19 +202,52 @@ public struct NowPlayingView: View {
                             .foregroundColor(.white)
                     }
                     
-                    // Repeat
-                    Image(systemName: "repeat")
-                        .font(.system(size: 20))
-                        .foregroundColor(.gray)
+                    // Repeat (loops the current track)
+                    Button(action: { player.toggleRepeat() }) {
+                        Image(systemName: player.isRepeating ? "repeat.1" : "repeat")
+                            .font(.system(size: 20))
+                            .foregroundColor(player.isRepeating ? .purple : .gray)
+                    }
+                    .accessibilityLabel("Repeat track")
                 }
                 
-                // Bottom Secondary Controls (Lyrics, Queue, Direct Fan Support)
-                HStack(spacing: 36) {
+                // Bottom Secondary Controls (Lyrics, Download, Save, Queue, Support)
+                HStack(spacing: 30) {
                     // Toggle Lyrics
                     Button(action: { showingLyrics.toggle() }) {
                         Image(systemName: showingLyrics ? "quote.bubble.fill" : "quote.bubble")
                             .font(.system(size: 20))
                             .foregroundColor(showingLyrics ? .purple : .gray)
+                    }
+                    
+                    // Download the full song into the offline vault (FR-011, FR-012)
+                    Button(action: { downloadCurrentTrack(track) }) {
+                        Group {
+                            if downloadManager.isDownloaded(trackId: track.id) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                            } else if downloadManager.isDownloading(trackId: track.id) {
+                                ProgressView()
+                                    .tint(.purple)
+                                    .scaleEffect(0.7)
+                            } else {
+                                Image(systemName: "arrow.down.circle")
+                                    .foregroundColor(.white)
+                            }
+                        }
+                        .font(.system(size: 22))
+                    }
+                    .disabled(downloadManager.isDownloading(trackId: track.id) || downloadManager.isDownloaded(trackId: track.id))
+                    .accessibilityLabel("Download offline")
+                    
+                    // Save a real audio file to the device (Files app / share sheet)
+                    if let exportURL = downloadManager.exportURL(for: track.id) {
+                        ShareLink(item: exportURL) {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 22))
+                                .foregroundColor(.purple)
+                        }
+                        .accessibilityLabel("Save to Files")
                     }
                     
                     // Direct Fan Support Button (SRS FR-019)
@@ -251,7 +286,32 @@ public struct NowPlayingView: View {
             .sheet(isPresented: $showingSupportSheet) {
                 ArtistDirectSupportSheet(artistName: track.artistName)
             }
+            .sheet(isPresented: $showingQueueSheet) {
+                QueueSheet(player: player)
+            }
+            .onChange(of: downloadManager.lastError) { newValue in
+                if let newValue = newValue {
+                    downloadError = newValue
+                    downloadManager.clearError()
+                }
+            }
+            .alert(
+                "Download failed",
+                isPresented: Binding(
+                    get: { downloadError != nil },
+                    set: { if !$0 { downloadError = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) { downloadError = nil }
+            } message: {
+                Text(downloadError ?? "Please try again.")
+            }
         )
+    }
+    
+    private func downloadCurrentTrack(_ track: Track) {
+        // Runs in a background URLSession, so it keeps going when the app is backgrounded.
+        downloadManager.downloadTrack(track)
     }
     
     private func formatSeconds(_ seconds: TimeInterval) -> String {
@@ -323,5 +383,82 @@ struct ArtistDirectSupportSheet: View {
             .cornerRadius(12)
             .foregroundColor(.white)
         }
+    }
+}
+
+// Subview showing the upcoming play queue (SRS FR-022, FR-024)
+struct QueueSheet: View {
+    @ObservedObject var player: AudioPlayerService
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            Capsule()
+                .fill(Color.gray.opacity(0.4))
+                .frame(width: 40, height: 5)
+                .padding(.top, 12)
+            
+            Text("Up Next")
+                .font(.title3)
+                .fontWeight(.bold)
+                .foregroundColor(.white)
+                .padding(.top, 14)
+            
+            if player.queue.isEmpty {
+                Spacer()
+                Image(systemName: "list.bullet")
+                    .font(.system(size: 40))
+                    .foregroundColor(.gray)
+                Text("Nothing in the queue")
+                    .font(.subheadline)
+                    .foregroundColor(.gray)
+                    .padding(.top, 8)
+                Spacer()
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 2) {
+                        ForEach(Array(player.queue.enumerated()), id: \.offset) { index, track in
+                            Button(action: {
+                                player.playFromQueue(index)
+                                dismiss()
+                            }) {
+                                HStack(spacing: 12) {
+                                    AsyncImage(url: track.coverArtUrl) { img in
+                                        img.resizable().aspectRatio(contentMode: .fill)
+                                    } placeholder: {
+                                        Color.gray.opacity(0.3)
+                                    }
+                                    .frame(width: 44, height: 44)
+                                    .cornerRadius(6)
+                                    
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(track.title)
+                                            .font(.subheadline)
+                                            .foregroundColor(.white)
+                                            .lineLimit(1)
+                                        Text(track.artistName)
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
+                                            .lineLimit(1)
+                                    }
+                                    
+                                    Spacer()
+                                    
+                                    Text(track.formattedDuration)
+                                        .font(.caption.monospaced())
+                                        .foregroundColor(.gray)
+                                }
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 8)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.vertical, 10)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(white: 0.1).ignoresSafeArea())
     }
 }

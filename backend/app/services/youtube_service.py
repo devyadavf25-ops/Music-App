@@ -7,8 +7,10 @@ YouTube & Global Music Search Service:
 """
 
 import asyncio
+import base64
 import os
 import re
+import tempfile
 import time
 import logging
 import threading
@@ -40,6 +42,105 @@ _REGISTRY_MAX_ENTRIES = 2048
 # await the same in-flight download instead of racing yt-dlp on one file.
 _INFLIGHT_DOWNLOADS: Dict[str, asyncio.Future] = {}
 _DOWNLOADS_LOCK = threading.Lock()
+
+# Resolved googlevideo URLs cached per video: {video_id: (timestamp, url, format)}.
+# yt-dlp resolution costs 5-10s per request — caching the direct URL makes repeat
+# plays near-instant. URLs typically stay valid ~6h; 1h TTL is conservatively safe.
+_STREAM_URL_CACHE: OrderedDict = OrderedDict()
+_STREAM_URL_TTL_SECONDS = 3600
+_STREAM_URL_MAX_ENTRIES = 256
+
+# All container extensions a cached/inline audio file may use. ".mp4" is AAC in
+# an MP4 container — byte-identical family to ".m4a" and universally playable.
+_AUDIO_EXTS = [".m4a", ".mp4", ".webm", ".opus", ".mp3", ".ogg"]
+
+
+def _ext_to_mime(ext: str) -> str:
+    return {
+        ".m4a": "audio/mp4",
+        ".mp4": "audio/mp4",
+        ".webm": "audio/webm",
+        ".mp3": "audio/mpeg",
+        ".opus": "audio/opus",
+        ".ogg": "audio/ogg",
+    }.get(ext.lower(), "audio/mp4")
+
+
+# --- YouTube network environment -------------------------------------------
+# Cloud hosts like Render run on datacenter IPs that YouTube routinely blocks
+# for yt-dlp ("Sign in to confirm you're not a bot"), which makes server-side
+# streaming/downloads fail with a 502. Supplying account cookies or a
+# residential proxy lets yt-dlp authenticate and download successfully.
+# Configure either through environment variables (see README / render.yaml).
+_COOKIE_FILE_CACHE: Optional[str] = None
+
+
+def _resolve_cookie_file() -> Optional[str]:
+    """Return a path to a Netscape-format cookies.txt built from the environment.
+
+    Supported env vars (first match wins):
+      YOUTUBE_COOKIES_FILE : path to an existing cookies.txt
+      YOUTUBE_COOKIES_B64  : base64-encoded cookies.txt contents
+      YOUTUBE_COOKIES      : raw cookies.txt contents, or a path if it exists
+    """
+    global _COOKIE_FILE_CACHE
+    if _COOKIE_FILE_CACHE and os.path.exists(_COOKIE_FILE_CACHE):
+        return _COOKIE_FILE_CACHE
+    _COOKIE_FILE_CACHE = None
+
+    path = os.getenv("YOUTUBE_COOKIES_FILE")
+    if path and os.path.exists(path):
+        _COOKIE_FILE_CACHE = path
+        return path
+
+    content: Optional[str] = None
+    b64 = os.getenv("YOUTUBE_COOKIES_B64")
+    if b64:
+        try:
+            content = base64.b64decode(b64).decode("utf-8", "ignore")
+        except Exception as exc:
+            logger.warning("Invalid YOUTUBE_COOKIES_B64 value: %s", exc)
+
+    if content is None:
+        raw = os.getenv("YOUTUBE_COOKIES")
+        if raw:
+            if os.path.exists(raw):
+                _COOKIE_FILE_CACHE = raw
+                return raw
+            content = raw
+
+    if not content:
+        return None
+
+    fd, tmp_path = tempfile.mkstemp(prefix="youtube_cookies_", suffix=".txt")
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(content)
+    _COOKIE_FILE_CACHE = tmp_path
+    return tmp_path
+
+
+def _resolve_proxy() -> Optional[str]:
+    return os.getenv("YOUTUBE_PROXY") or os.getenv("YTDLP_PROXY") or None
+
+
+def youtube_network_opts() -> Dict[str, Any]:
+    """Extra yt-dlp options that let downloads work behind blocked cloud IPs."""
+    opts: Dict[str, Any] = {}
+    proxy = _resolve_proxy()
+    if proxy:
+        opts["proxy"] = proxy
+    cookie_file = _resolve_cookie_file()
+    if cookie_file:
+        opts["cookiefile"] = cookie_file
+    return opts
+
+
+def youtube_network_configured() -> Dict[str, bool]:
+    """Diagnostic: whether cookies / proxy are available to yt-dlp."""
+    return {
+        "cookies": _resolve_cookie_file() is not None,
+        "proxy": _resolve_proxy() is not None,
+    }
 
 
 def sanitize_filename(name: str) -> str:
@@ -107,6 +208,7 @@ class YouTubeService:
             "socket_timeout": 8,
             "default_search": "ytsearch1",
         }
+        ydl_opts.update(youtube_network_opts())
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 result = ydl.extract_info(f"ytsearch1:{query}", download=False)
@@ -153,6 +255,7 @@ class YouTubeService:
             "socket_timeout": 10,
             "default_search": f"ytsearch{limit}",
         }
+        ydl_opts.update(youtube_network_opts())
         search_query = f"ytsearch{limit}:{query}"
 
         try:
@@ -322,18 +425,53 @@ class YouTubeService:
 
     @classmethod
     async def get_stream_url(cls, video_id: str) -> Dict[str, Any]:
-        """Resolves direct streamable audio URL from YouTube."""
-        return await asyncio.to_thread(cls._sync_get_stream_url, video_id)
+        """Resolves direct streamable audio URL from YouTube (with URL caching)."""
+        now = time.time()
+        cached = _cache_get(_STREAM_URL_CACHE, video_id)
+        if cached is not None:
+            ts, url, fmt = cached
+            if now - ts < _STREAM_URL_TTL_SECONDS:
+                return {
+                    "video_id": video_id,
+                    "title": f"YouTube Audio {video_id}",
+                    "stream_url": url,
+                    "duration": 0,
+                    "format": fmt,
+                    "bitrate_kbps": 160,
+                    "sample_rate": 48000,
+                    "bit_depth": 16,
+                    "cached_resolution": True,
+                }
+            with _DOWNLOADS_LOCK:
+                _STREAM_URL_CACHE.pop(video_id, None)
+        result = await asyncio.to_thread(cls._sync_get_stream_url, video_id)
+        url = result.get("stream_url")
+        if url and str(url).startswith("http"):
+            _cache_put(_STREAM_URL_CACHE, video_id, (now, url, result.get("format", "m4a")), _STREAM_URL_MAX_ENTRIES)
+        return result
 
     @classmethod
-    def _sync_get_stream_url(cls, video_id: str) -> Dict[str, Any]:
+    def _sync_get_stream_url(cls, video_id: str, extra_opts: Optional[dict] = None) -> Dict[str, Any]:
         video_url = f"https://www.youtube.com/watch?v={video_id}"
         ydl_opts = {
-            "format": "bestaudio/best/ba/b",
+            "format": "bestaudio[ext=m4a]/bestaudio/best/ba/b",
             "quiet": True,
             "no_warnings": True,
             "socket_timeout": 15,
+            # Rotate through multiple extractor clients: if YouTube throttles or
+            # blocks one client type, the next one often still works.
+            "extractor_args": {
+                "youtube": {
+                    "player_client": [
+                        "ios", "android", "tv", "web_safari", "web"
+                    ],
+                }
+            },
+            "nocheckcertificate": True,
         }
+        ydl_opts.update(youtube_network_opts())
+        if extra_opts:
+            ydl_opts.update(extra_opts)
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(video_url, download=False)
@@ -429,13 +567,21 @@ class YouTubeService:
 
         # Prefer m4a (AAC) — universally playable in Chrome, Firefox, Safari and iOS.
         # webm/opus is a fallback since Safari cannot decode it in <audio> elements.
+        # Same client rotation as stream resolution for resilience against blocks.
         ydl_opts = {
             "format": "bestaudio[ext=m4a]/bestaudio[acodec^=mp4a]/bestaudio/best/ba/b",
             "outtmpl": output_template,
             "quiet": True,
             "no_warnings": True,
             "socket_timeout": 20,
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["ios", "android", "tv", "web_safari", "web"],
+                }
+            },
+            "nocheckcertificate": True,
         }
+        ydl_opts.update(youtube_network_opts())
 
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -467,4 +613,117 @@ class YouTubeService:
                 }
         except Exception as e:
             logger.error(f"Error downloading audio for {video_id}: {e}")
-            raise RuntimeError(f"Download failed for {video_id}: {e}")
+            raise RuntimeError(
+                f"Download failed for {video_id}: {e}. "
+                "YouTube blocks most cloud/datacenter IPs (Render, Railway, etc.). "
+                "Fix it by setting YOUTUBE_COOKIES_FILE (a Netscape cookies.txt exported "
+                "from a logged-in browser) or YOUTUBE_PROXY (a residential proxy URL) "
+                "in your Render environment variables."
+            ) from e
+
+    @classmethod
+    async def stream_audio_chunks(cls, video_id: str, range_header: Optional[str] = None):
+        """Yield audio bytes as they download so playback starts in ~1-3s instead
+        of waiting for a full file download.
+
+        Order:
+        1. Cached file on disk -> instant sequential stream (no network).
+        2. Direct googlevideo URL -> piped live (fast start, no disk usage).
+        3. Full yt-dlp download to disk -> streamed after completion (slowest).
+
+        Raises RuntimeError with a clear message when YouTube blocks the host IP.
+        """
+        # 1. Cached file: stream straight from disk instantly.
+        for ext in _AUDIO_EXTS:
+            candidate = os.path.join(DOWNLOADS_DIR, f"{video_id}{ext}")
+            if os.path.exists(candidate) and os.path.getsize(candidate) > 1024:
+                with open(candidate, "rb") as f:
+                    while True:
+                        chunk = f.read(64 * 1024)
+                        if not chunk:
+                            break
+                        yield chunk
+                return
+
+        # 2. Resolve a direct stream URL and pipe bytes live from googlevideo,
+        #    teeing every chunk to disk so repeat plays are served instantly
+        #    from cache. Only skipped for mid-file ranges (a partial range must
+        #    not be persisted as a complete file); browsers send "bytes=0-" on
+        #    first play, which covers the whole file and is safe to cache.
+        range_start = 0
+        if range_header:
+            try:
+                range_start = int(str(range_header).split("=")[1].split("-")[0])
+            except (IndexError, ValueError):
+                range_start = 0
+        tee_to_disk = range_start == 0
+        tmp_path = os.path.join(DOWNLOADS_DIR, f".{video_id}.part")
+        try:
+            info = await cls.get_stream_url(video_id)
+            direct_url = info.get("stream_url")
+            if not direct_url or not str(direct_url).startswith("http"):
+                raise RuntimeError("no direct stream url resolved")
+            import httpx
+            headers = {
+                "User-Agent": "com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5 like Mac OS X)"
+            }
+            if range_header:
+                headers["Range"] = range_header
+            timeout = httpx.Timeout(10.0, read=None)
+            async with httpx.AsyncClient(follow_redirects=True, timeout=timeout) as client:
+                async with client.stream("GET", direct_url, headers=headers) as resp:
+                    if resp.status_code >= 400:
+                        raise RuntimeError(f"upstream status {resp.status_code}")
+                    out_f = open(tmp_path, "wb") if tee_to_disk else None
+                    total_written = 0
+                    content_length = int(resp.headers.get("content-length") or 0)
+                    promoted = False
+                    try:
+                        async for chunk in resp.aiter_bytes(64 * 1024):
+                            if out_f is not None:
+                                out_f.write(chunk)
+                                total_written += len(chunk)
+                            yield chunk
+                        # Promote to cache ONLY when the whole file was received —
+                        # a client that disconnects mid-stream must leave behind
+                        # nothing (a partial file would break every future play).
+                        complete = (
+                            content_length == 0
+                            or total_written >= content_length
+                        )
+                        if out_f is not None and complete and total_written > 1024:
+                            out_f.close()
+                            out_f = None
+                            fmt = str(info.get("format") or "m4a").lower()
+                            ext = f".{fmt}" if f".{fmt}" in _AUDIO_EXTS else ".m4a"
+                            final_path = os.path.join(DOWNLOADS_DIR, f"{video_id}{ext}")
+                            try:
+                                os.replace(tmp_path, final_path)
+                                promoted = True
+                            except OSError:
+                                pass
+                    finally:
+                        if out_f is not None:
+                            out_f.close()
+                            try:
+                                os.remove(tmp_path)
+                            except OSError:
+                                pass
+                    if promoted:
+                        return
+        except Exception as pipe_err:
+            logger.warning("Direct pipe failed for %s (%s); falling back to disk download", video_id, pipe_err)
+            try:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+            except OSError:
+                pass
+
+        # 3. Last resort: complete download to disk, then stream the file.
+        result = await cls.download_audio(video_id)
+        with open(result["file_path"], "rb") as f:
+            while True:
+                chunk = f.read(64 * 1024)
+                if not chunk:
+                    break
+                yield chunk

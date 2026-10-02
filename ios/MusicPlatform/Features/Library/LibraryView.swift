@@ -366,6 +366,24 @@ public struct LibraryView: View {
                     .foregroundColor(.purple)
                     .font(.system(size: 24))
             }
+            
+            // Save a real audio file to the device (Files app / share sheet)
+            if let filePath = item.filePath {
+                ShareLink(item: filePath) {
+                    Image(systemName: "square.and.arrow.up")
+                        .foregroundColor(.purple)
+                        .font(.system(size: 20))
+                }
+                .padding(.leading, 10)
+            }
+            
+            // Remove from the offline vault
+            Button(action: { downloadManager.deleteDownload(item) }) {
+                Image(systemName: "trash")
+                    .foregroundColor(Color(hex: "94a3b8"))
+                    .font(.system(size: 18))
+            }
+            .padding(.leading, 8)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 10)
@@ -443,7 +461,7 @@ public struct LibraryView: View {
 
 // MARK: - Models
 
-public struct DownloadedItem: Identifiable {
+public struct DownloadedItem: Identifiable, Codable {
     public let id: String
     public let title: String
     public let artistName: String

@@ -76,27 +76,93 @@ public actor NetworkAPIClient {
     
     public func downloadYouTubeAudio(videoId: String, progressHandler: @escaping (Double) -> Void) async throws -> URL {
         let url = URL(string: "\(baseURL)/youtube/download/\(videoId)")!
+        // Keep the video ID as the stored name so the item can be found after relaunch.
+        return try await downloadAudioFile(from: url, baseName: "yt_\(videoId)", progressHandler: progressHandler)
+    }
+
+    /// Downloads the full-length audio for any track — YouTube, catalog, or a
+    /// resolved iTunes search result — and stores it in the AuraDownloads folder.
+    /// The backend resolves the complete song, not a short preview.
+    public func downloadAudio(for track: Track, progressHandler: @escaping (Double) -> Void) async throws -> URL {
+        try await downloadAudioFile(
+            from: Self.downloadURL(for: track),
+            baseName: Self.storedBaseName(for: track),
+            progressHandler: progressHandler
+        )
+    }
+
+    // MARK: - Static Download Helpers
+    // Shared by the foreground paths above and the background URLSession used by
+    // DownloadManager, so URL / filename rules live in one place.
+
+    /// Backend download endpoint for any track.
+    public static func downloadURL(for track: Track) -> URL {
+        if track.id.hasPrefix("yt_") {
+            let videoId = String(track.id.dropFirst(3))
+            return URL(string: "\(baseURL)/youtube/download/\(videoId)")!
+        }
+        var components = URLComponents(string: "\(baseURL)/catalog/audio/\(track.id)")!
+        components.queryItems = [
+            URLQueryItem(name: "title", value: track.title),
+            URLQueryItem(name: "artist", value: track.artistName)
+        ]
+        return components.url!
+    }
+
+    /// Stable, filesystem-safe base name that encodes the track id so the item can
+    /// be re-associated with its metadata after the app relaunches.
+    public static func storedBaseName(for track: Track) -> String {
+        let readable = sanitize("\(track.title)")
+        return sanitize("\(track.id)__\(readable)")
+    }
+
+    // MARK: - Download Helpers
+
+    private func downloadAudioFile(
+        from url: URL,
+        baseName: String,
+        progressHandler: @escaping (Double) -> Void
+    ) async throws -> URL {
         let (tempURL, response) = try await session.download(from: url)
-        
+
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw APIError.downloadFailed
         }
-        
-        // Move to permanent location in documents directory
+
+        // Move to permanent location in the documents directory
         let documentsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let downloadsDir = documentsDir.appendingPathComponent("AuraDownloads", isDirectory: true)
         try FileManager.default.createDirectory(at: downloadsDir, withIntermediateDirectories: true)
-        
-        // Keep the video ID as the filename so the item can be found after relaunch.
-        let destination = downloadsDir.appendingPathComponent("\(videoId).m4a")
-        
+
+        let ext = Self.fileExtension(for: response.mimeType)
+        let destination = downloadsDir.appendingPathComponent("\(baseName).\(ext)")
+
         if FileManager.default.fileExists(atPath: destination.path) {
             try FileManager.default.removeItem(at: destination)
         }
         try FileManager.default.moveItem(at: tempURL, to: destination)
-        
+
         progressHandler(1.0)
         return destination
+    }
+
+    private static func sanitize(_ value: String) -> String {
+        let invalid = CharacterSet(charactersIn: "/\\?%*:|\"<>\n\r\t")
+        let cleaned = value.components(separatedBy: invalid).joined(separator: "_")
+        let trimmed = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+        let result = trimmed.isEmpty ? "aura_track" : trimmed
+        return String(result.prefix(120))
+    }
+
+    static func fileExtension(for mimeType: String?) -> String {
+        switch (mimeType ?? "").lowercased() {
+        case "audio/mp4", "audio/m4a", "audio/x-m4a": return "m4a"
+        case "audio/webm": return "webm"
+        case "audio/wav", "audio/x-wav", "audio/wave": return "wav"
+        case "audio/flac", "audio/x-flac": return "flac"
+        case "audio/aac": return "aac"
+        default: return "mp3"
+        }
     }
     
     // MARK: - Recommendations

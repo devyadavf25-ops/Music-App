@@ -10,6 +10,9 @@
 import Foundation
 import AVFoundation
 import MediaPlayer
+#if canImport(UIKit)
+import UIKit
+#endif
 
 @MainActor
 public class AudioPlayerService: ObservableObject {
@@ -21,10 +24,14 @@ public class AudioPlayerService: ObservableObject {
     @Published public private(set) var duration: TimeInterval = 0
     @Published public private(set) var deliveredMetrics: DeliveredAudioMetrics?
     @Published public private(set) var currentShuffleMode: ShuffleMode = .standard
+    @Published public private(set) var isRepeating: Bool = false
     @Published public var queue: [Track] = []
     
+    /// Previously played tracks, newest last. Enables true Previous-track behavior.
+    private var history: [Track] = []
     private var player: AVQueuePlayer?
     private var timeObserverToken: Any?
+    private var itemEndObserver: NSObjectProtocol?
     
     public init() {
         configureAudioSession()
@@ -44,7 +51,11 @@ public class AudioPlayerService: ObservableObject {
         try? session.setPreferredSampleRate(96000.0)
     }
     
-    public func play(track: Track, fromQueue: [Track] = []) {
+    public func play(track: Track, fromQueue: [Track] = [], recordHistory: Bool = true) {
+        if recordHistory, let current = currentTrack, current.id != track.id {
+            history.append(current)
+            if history.count > 50 { history.removeFirst() }
+        }
         self.currentTrack = track
         if !fromQueue.isEmpty {
             self.queue = fromQueue
@@ -76,16 +87,56 @@ public class AudioPlayerService: ObservableObject {
             player?.removeAllItems()
             player?.insert(playerItem, after: nil)
         }
+
+        observeTrackEnd(for: playerItem)
         
         // Inspect actual delivered hardware format (FR-004 Honesty Requirement)
         inspectDeliveredFormat(for: track)
         
         player?.play()
         self.isPlaying = true
+        // Start from the metadata duration; the periodic time observer replaces it
+        // with the real asset duration so the scrubber always spans the full song.
         self.duration = Double(track.durationSeconds)
         
         updateNowPlayingInfo(for: track)
         startTimeObserver()
+    }
+
+    // MARK: - Full-Length Playback
+
+    // Full-length playback: when a song reaches its natural end, continue with the
+    // next queued track instead of stopping partway through the album / playlist.
+    private func observeTrackEnd(for item: AVPlayerItem) {
+        if let token = itemEndObserver {
+            NotificationCenter.default.removeObserver(token)
+        }
+        itemEndObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: item,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.handleTrackFinished()
+            }
+        }
+    }
+
+    private func handleTrackFinished() {
+        if isRepeating {
+            seek(to: 0)
+            player?.play()
+            isPlaying = true
+            updatePlaybackState()
+            return
+        }
+        if !queue.isEmpty {
+            playNext()
+        } else {
+            currentTime = duration
+            isPlaying = false
+            updatePlaybackState()
+        }
     }
     
     public func togglePlayPause() {
@@ -111,6 +162,26 @@ public class AudioPlayerService: ObservableObject {
         guard !queue.isEmpty else { return }
         let nextTrack = queue.removeFirst()
         play(track: nextTrack, fromQueue: queue)
+    }
+
+    /// Jumps back to the previously played track (or restarts the current one).
+    public func playPrevious() {
+        guard let previous = history.popLast() else {
+            seek(to: 0)
+            return
+        }
+        play(track: previous, fromQueue: queue, recordHistory: false)
+    }
+
+    /// Plays the track at the given index of the upcoming queue and shrinks it.
+    public func playFromQueue(_ index: Int) {
+        guard queue.indices.contains(index) else { return }
+        let selected = queue.remove(at: index)
+        play(track: selected, fromQueue: queue)
+    }
+
+    public func toggleRepeat() {
+        isRepeating.toggle()
     }
     
     public func setShuffleMode(_ mode: ShuffleMode) {
@@ -144,6 +215,13 @@ public class AudioPlayerService: ObservableObject {
         timeObserverToken = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             guard let self = self else { return }
             self.currentTime = time.seconds
+            // Prefer the real asset duration over the catalog metadata so the full
+            // song length is always reflected (avoids truncated / clip-length bars).
+            if let itemDuration = self.player?.currentItem?.duration.seconds,
+               itemDuration.isFinite,
+               itemDuration > 0 {
+                self.duration = itemDuration
+            }
         }
     }
     
@@ -161,6 +239,21 @@ public class AudioPlayerService: ObservableObject {
             self?.playNext()
             return .success
         }
+        commandCenter.previousTrackCommand.addTarget { [weak self] _ in
+            self?.playPrevious()
+            return .success
+        }
+        commandCenter.changePlaybackPositionCommand.addTarget { [weak self] event in
+            guard let positionEvent = event as? MPChangePlaybackPositionCommandEvent else {
+                return .commandFailed
+            }
+            self?.seek(to: positionEvent.positionTime)
+            return .success
+        }
+        commandCenter.togglePlayPauseCommand.addTarget { [weak self] _ in
+            self?.togglePlayPause()
+            return .success
+        }
     }
     
     private func updateNowPlayingInfo(for track: Track) {
@@ -172,6 +265,23 @@ public class AudioPlayerService: ObservableObject {
         nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = 0.0
         nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = 1.0
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
+        loadArtwork(for: track)
+    }
+
+    /// Loads album art for the lock screen / Control Center asynchronously so it
+    /// never blocks playback start.
+    private func loadArtwork(for track: Track) {
+        #if canImport(UIKit)
+        URLSession.shared.dataTask(with: track.coverArtUrl) { data, _, _ in
+            guard let data = data, let image = UIImage(data: data) else { return }
+            let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+            DispatchQueue.main.async {
+                var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [String: Any]()
+                info[MPMediaItemPropertyArtwork] = artwork
+                MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+            }
+        }.resume()
+        #endif
     }
     
     private func updatePlaybackState() {

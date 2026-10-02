@@ -199,6 +199,27 @@ Steps:
 > - `GET /api/v1/youtube/status` reports whether cookies/proxy are detected and is safe
 >   to call for diagnostics.
 
+### Automatic, test-gated backend deploys
+
+`.github/workflows/backend-tests-and-deploy.yml` runs on every push to `main` that
+touches `backend/`:
+
+1. Installs the backend dependencies and runs the `pytest` suite (against the
+   zero-config SQLite test database — no secrets required).
+2. **Only if the tests pass**, it calls a Render **Deploy Hook** to redeploy
+   `aura-music-api`.
+
+Setup:
+
+1. Render → `aura-music-api` → **Settings → Deploy Hook** → copy the URL.
+2. GitHub → repo **Settings → Secrets and variables → Actions → New repository secret**
+   → name it `RENDER_DEPLOY_HOOK_URL` and paste the hook URL.
+3. **Turn OFF Render's auto-deploy** for that service (Settings → Auto-Deploy → Off),
+   otherwise each push deploys twice — once automatically and once via the hook.
+
+If `RENDER_DEPLOY_HOOK_URL` is not set, the deploy step is skipped with a warning
+(and the workflow still passes), so nothing breaks before you configure it.
+
 ### iOS background downloads
 
 The iOS client downloads full-length audio through a **background `URLSession`**
